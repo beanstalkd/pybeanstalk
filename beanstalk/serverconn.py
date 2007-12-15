@@ -30,9 +30,9 @@ class ServerConn(object):
             (finished, satus, expected_data or result)
         '''
         command = self._get_command()
-        finished, status, result = handler(command)
+        status, result = handler(command)
 
-        while not finished:
+        while status == 'i':
             remaining = result
             x = select.select([self._socket],[],[])[0]
             x = x[0]
@@ -41,7 +41,7 @@ class ServerConn(object):
             get_amount = ((remaining < 20) and remaining) or 20
             data = self._socket.recv(get_amount)
             try:
-                finished, status, result = handler(data)
+                status, result = handler(data)
             except Exception, e:
                 print 'got exception! error is: %s' % (e,)
                 raise
@@ -54,8 +54,9 @@ class ServerConn(object):
         self.__writeline(line)
         return self._get_response(handler)
 
-    def handle_buried(self):
-        print 'job burried'
+    def handle_status(self, status):
+        if status == 'b':
+            print 'job burried'
 
     def put(self, data, pri=0, delay=0):
         return self._do_interaction(*self.proto.process_put(data, pri, delay))
