@@ -16,24 +16,37 @@ class ServerConn(object):
     def __writeline(self, line):
         return self._socket.send(line)
 
-    def _get_response(self, handler):
+    def _get_command(self):
+        data = ''
         while True:
+            x = select.select([self._socket],[],[])[0][0]
+            data += x.recv(1)
+            if data.endswith('\r\n'):
+                break
+        return data
+
+    def _get_response(self, handler):
+        ''' keep in mind handler returns a tuple:
+            (finished, satus, expected_data or result)
+        '''
+        command = self._get_command()
+        finished, status, result = handler(command)
+
+        while not finished:
+            remaining = result
             x = select.select([self._socket],[],[])[0]
             x = x[0]
             if not x is self._socket:
                 raise Exception('erich done fucked up')
-            data = self._socket.recv(20)
+            get_amount = ((remaining < 20) and remaining) or 20
+            data = self._socket.recv(get_amount)
             try:
-                result = handler(data)
+                finished, status, result = handler(data)
             except Exception, e:
                 print 'got exception! error is: %s' % (e,)
                 raise
 
-            if result:
-                break
-            elif hasattr(handler, 'status') and not handler.status == 'i':
-                self.handle_buried()
-                break
+        self.handle_status(status)
         return result
 
     def _do_interaction(self, line, handler):
