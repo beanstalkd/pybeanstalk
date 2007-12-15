@@ -21,7 +21,7 @@ class proto(object):
         ret = x + ('',) * blanks
         return ret
 
-    def _protoerror(self, response=''):
+    def _protoerror(self, response = ''):
         raise ProtoError('Unexpected response: %s' % (response,))
 
     def _failure(self, response = 'not found'):
