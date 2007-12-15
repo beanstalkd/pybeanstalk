@@ -3,7 +3,7 @@ import yaml
 class FailureError(Exception): pass
 class ProtoError(Exception): pass
 
-class proto(object):
+class Proto(object):
     """
         Protocol handler for processing the beanstalk protocol
 
