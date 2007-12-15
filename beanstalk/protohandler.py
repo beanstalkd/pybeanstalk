@@ -1,8 +1,8 @@
 import yaml
 
 class proto(object):
-    def __init__(self, serialize=str):
-        self.serialize = serialize
+    def __init__(self):
+        pass
 
     def _nsplit(self, line, n, sep = ' '):
         x = line.split(sep, n)
@@ -92,7 +92,6 @@ class proto(object):
                 return fasle
 
     def process_put(self, data, pri=0, delay=0):
-        data = self.serialize(data)
         dlen = len(data)
         putline = 'put %(pri)s %(delay)s %(dlen)s\r\n%(data)s\r\n'
         putline %= locals()
