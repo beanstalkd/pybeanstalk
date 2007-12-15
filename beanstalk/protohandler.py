@@ -1,6 +1,11 @@
 import yaml
 
-class proto(object):
+class ProtoError(Exception):
+    pass
+class JobError(Exception):
+    pass
+
+class Proto(object):
     def __init__(self):
         pass
 
@@ -138,7 +143,4 @@ class proto(object):
             line = 'stats\r\n'
         handler = self.make_stats_handler()
         return (line, handler)
-
-x = proto()
-x.process_put('foobarbaz')
 
