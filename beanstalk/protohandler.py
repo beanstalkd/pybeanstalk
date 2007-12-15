@@ -91,7 +91,7 @@ class Proto(object):
                 startline, rest = self._nsplit(response, 2, sep='\r\n')
                 rword, size = self._nsplit(startline, 2, sep=' ')
                 if rword == ok:
-                    handler.satus = 'i'
+                    handler.status = 'i'
                     size = int(size)
                 elif rword == error:
                     self._failure(rword)
