@@ -27,12 +27,17 @@ class ServerConn(object):
                 result = handler(data)
             except Exception, e:
                 print 'got exception! error is: %s' % (e,)
+                raise
+
             if result:
                 break
-            else:
+            elif hasattr(handler, 'status') and not handler.status == 'i':
                 self.handle_buried()
+                break
+        return result
 
     def _do_interaction(self, line, handler):
+        print 'line is: %s handler is %s' % (line.strip(), handler)
         self.__writeline(line)
         return self._get_response(handler)
 
@@ -40,9 +45,13 @@ class ServerConn(object):
         print 'job burried'
 
     def put(self, data, pri=0, delay=0):
-        self._do_interaction(*self.proto.process_put(data, pri, delay))
+        return self._do_interaction(*self.proto.process_put(data, pri, delay))
+
+    def reserve(self):
+        return self._do_interaction(*self.proto.process_reserve())
 
 if __name__ == '__main__':
     x = ServerConn('192.168.2.1', 11300)
-    x.put('first python test')
+    x.put('python test\nthings!')
+    print x.reserve()
 
