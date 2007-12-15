@@ -16,7 +16,7 @@ class Proto(object):
         pass
 
     def _nsplit(self, line, n, sep = ' '):
-        x = line.split(sep, n)
+        x = tuple(line.split(sep, n))
         blanks = len(x) - n
         ret = x + ('',) * blanks
         return ret
@@ -44,7 +44,7 @@ class Proto(object):
 
     def make_job_handler(self, ok = None, error = None):
         def handler(response):
-            if not hassattr(handler, 'status'):
+            if not hasattr(handler, 'status'):
                 infoline, rest = self._nsplit(response, 2, sep='\r\n')
                 rword, jid, pri, size = self._nsplit(infoline, 4)
                 if rword == ok:
@@ -63,13 +63,14 @@ class Proto(object):
 
             if not len(data) < size:
                 del handler.status
-                return self.new_job(pri=pri, id=jid, data=data)
+                return self.job(pri = pri, id = jid, data = data)
             else:
                 handler.pri = pri
                 handler.jid = jid
                 handler.size = size
                 handler.data = data
                 return False
+        return handler
 
     def make_kick_handler(self):
         def handler(response):
@@ -79,6 +80,7 @@ class Proto(object):
                 return count
             else:
                 self._protoerror(response)
+        return handler
 
     def make_stats_handler(self):
         error = 'NOT_FOUND'
@@ -106,7 +108,8 @@ class Proto(object):
             else:
                 handler.size = size
                 handler.data = data
-                return fasle
+                return False
+        return handler
 
     def process_put(self, data, pri = 0, delay = 0):
         """
