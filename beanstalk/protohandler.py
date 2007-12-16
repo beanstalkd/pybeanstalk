@@ -113,7 +113,7 @@ class Proto(object):
         return handler
         return handler
 
-    def process_put(self, data, pri = 0, delay = 0):
+    def process_put(self, data, pri, delay):
         """
         put
             send:
@@ -144,7 +144,7 @@ class Proto(object):
         handler = self.make_job_handler(ok='RESERVED')
         return (line, handler)
 
-    def process_delete(self, id):
+    def process_delete(self, jid):
         """
         delete
             send:
@@ -154,11 +154,11 @@ class Proto(object):
                 DELETED
                 NOT_FOUND
         """
-        line = 'delete %s\r\n' % (id,)
+        line = 'delete %s\r\n' % (jid,)
         handler = self.make_generic_handler(ok='DELETED', error='NOT_FOUND')
         return (line, handler)
 
-    def process_release(self, id, pri = 0, delay = 0):
+    def process_release(self, jid, pri, delay):
         """
         release
             send:
@@ -169,11 +169,11 @@ class Proto(object):
                 BURIED
                 NOT_FOUND
         """
-        line = 'release %(id)s %(pri)s %(delay)s\r\n' % locals()
+        line = 'release %(jid)s %(pri)s %(delay)s\r\n' % locals()
         handler = self.make_generic_handler(ok='RELEASED', full='BURIED', error='NOT_FOUND')
         return (line, handler)
 
-    def process_bury(self, id, pri = 0):
+    def process_bury(self, jid, pri):
         """
         bury
             send:
@@ -183,11 +183,11 @@ class Proto(object):
                 BURIED
                 NOT_FOUND
         """
-        line = 'bury %(id)s %(pri)s\r\n' % locals()
+        line = 'bury %(jid)s %(pri)s\r\n' % locals()
         handler = self.make_generic_handler(ok='BURIED', error='NOT_FOUND')
         return (line, handler)
 
-    def process_peek(self, id = 0):
+    def process_peek(self, jid):
         """
         peek
             send:
@@ -197,9 +197,12 @@ class Proto(object):
                 NOT_FOUND
                 FOUND <id> <pri> <bytes>
                 <data>
+
+        NOTE: as of beanstalk 0.5, peek without and id param will return the
+              first burried job, this is extremely likely to change
         """
-        if id:
-            line = 'peek %s\r\n' % (id,)
+        if jid:
+            line = 'peek %s\r\n' % (jid,)
         else:
             line = 'peek\r\n'
         handler = self.make_job_handler(ok='FOUND', error='NOT_FOUND')
@@ -218,7 +221,7 @@ class Proto(object):
         handler = self.make_kick_handler()
         return (line, handler)
 
-    def process_stats(self, jid = 0):
+    def process_stats(self, jid):
         """
         stats
             send:
