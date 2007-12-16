@@ -187,7 +187,7 @@ class Proto(object):
         handler = self.make_generic_handler(ok='BURIED', error='NOT_FOUND')
         return (line, handler)
 
-    def process_peek(self, jid):
+    def process_peek(self, jid = 0):
         """
         peek
             send:
@@ -221,7 +221,7 @@ class Proto(object):
         handler = self.make_kick_handler()
         return (line, handler)
 
-    def process_stats(self, jid):
+    def process_stats(self, jid = 0):
         """
         stats
             send:
