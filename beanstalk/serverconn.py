@@ -58,14 +58,46 @@ class ServerConn(object):
         if status == 'b':
             print 'job burried'
 
-    def put(self, data, pri=0, delay=0):
+    def put(self, data, pri = 0, delay = 0):
         return self._do_interaction(*self.proto.process_put(data, pri, delay))
 
     def reserve(self):
         return self._do_interaction(*self.proto.process_reserve())
 
+    def delete(self, jid):
+        return self._do_interaction(*self.proto.process_delete(jid))
+    def release(self, jid, newpri = 0, delay = 0):
+        return self._do_interaction(
+            *self.proto.process_release(jid, newpri, delay))
+    def bury(self, jid, newpri = 0):
+        return self._do_interaction(*self.proto.process_bury(jid, newpri))
+
+    def peek(self, jid = 0):
+        return self._do_interaction(*self.proto.process_peek(jid))
+
+    def kick(self, bound = 0 ):
+        return self._do_interaction(*self.proto.process_kick(bound))
+
+    def stats(self, jid = 0):
+        return self._do_interaction(*self.proto.process_stats(jid))
+
+
 if __name__ == '__main__':
     x = ServerConn('192.168.2.1', 11300)
     x.put('python test\nthings!')
-    print x.reserve()
-
+    x.put('python test\nstuff!')
+    x.put('python test\nyaitem')
+    job = x.reserve()
+    x.bury(job['id'])
+    job = x.reserve()
+    x.release(job['id'], job['pri'])
+    for i in range(2):
+        job = x.reserve()
+        x.delete(job['id'])
+    burried = x.peek()
+    if burried:
+        print burried
+    x.kick(1)
+    kicked = x.reserve()
+    print kicked
+    x.delete(kicked['id'])

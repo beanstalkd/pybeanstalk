@@ -75,7 +75,7 @@ class Proto(object):
     def make_kick_handler(self):
         def handler(response):
             message, n = self._nsplit(response, 2, sep=' ')
-            if message == 'KICKED':
+            if message.strip() == 'KICKED':
                 count = int(n.strip())
                 return ('d', count)
             else:
@@ -110,7 +110,6 @@ class Proto(object):
                 handler.size = size
                 handler.data = data
                 return ('i', (size + 2) - len(data))
-        return handler
         return handler
 
     def process_put(self, data, pri, delay):
