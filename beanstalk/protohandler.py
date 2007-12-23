@@ -22,10 +22,10 @@ class Proto(object):
         return ret
 
     def _protoerror(self, response = ''):
-        raise ProtoError('Unexpected response: %s' % (response,))
+        raise ProtoError('Unexpected response: "%s"' % (response,))
 
     def _failure(self, response = 'not found'):
-        raise FailureError('Failure: %s' % (response,))
+        raise FailureError('Failure: "%s"' % (response,))
 
     def make_generic_handler(self, ok = None, full = None, error = None):
         """Create function to handle single word responses"""
@@ -63,7 +63,8 @@ class Proto(object):
 
             if not len(data) < size:
                 del handler.status
-                return ('d', dict(pri = pri, id = jid, data = data))
+                return ('d', dict(pri = pri, jid = jid,
+                        data = data.rstrip()))
             else:
                 handler.pri = pri
                 handler.jid = jid
@@ -88,7 +89,7 @@ class Proto(object):
         ok = 'OK'
 
         def handler(response):
-            if not hasattr(handler, status):
+            if not hasattr(handler, 'status'):
                 startline, rest = self._nsplit(response, 2, sep='\r\n')
                 rword, size = self._nsplit(startline, 2, sep=' ')
                 if rword == ok:

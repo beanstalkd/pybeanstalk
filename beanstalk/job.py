@@ -1,4 +1,5 @@
 import yaml
+from protohandler import FailureError
 
 DEFALUT_CONN = None
 class Job(object):
@@ -24,6 +25,8 @@ class Job(object):
     '''
 
     def __init__(self, conn = None, jid=0, pri=0, data=''):
+        print "job initialized: conn: %s, id: %s, pri: %s, data: %s" %\
+            (conn, jid, pri, data)
         if not conn and not DEFAULT_CONN:
             raise AttributeError("No connection specified")
         elif not conn:
@@ -34,14 +37,16 @@ class Job(object):
         self.priority = pri
         self.delay = 0
         if data:
-            self.unserialize(data)
+            self._unserialize(data)
+        else:
+            self.data = ''
 
     def __del__(self):
         self.delete()
         super(Job, self).__del__()
 
     def __str__(self):
-        return self.serialize
+        return self._serialize()
 
     def _unserialize(self, data):
         self.data = yaml.load(data)
@@ -50,7 +55,7 @@ class Job(object):
         return yaml.dump(self.data)
 
     def put(self):
-        self._conn.put(self.serialize(), self.priority, self.delay
+        self._conn.put(self._serialize(), self.priority, self.delay)
 
     def release(self, delay = 0):
         try:
@@ -63,7 +68,7 @@ class Job(object):
     def delete(self):
         try:
             self._conn.delete(self.id)
-        except FalureError:
+        except FailureError:
             return False
         else:
             return True
