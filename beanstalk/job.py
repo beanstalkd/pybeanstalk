@@ -3,25 +3,24 @@ from protohandler import FailureError
 
 DEFALUT_CONN = None
 class Job(object):
-    ''' Job class is an optional class. The intent is for program specific
-    classes to have this as a base class, to handle processing as the
-    deveolper sees fit. Essentially it a convenience class.
+    ''' class Job is and optional class for keeping track of jobs returned
+    by the beanstalk server.
 
-    The reccomended way of using this class is to pass it into the a
-    connection constructor, so job getting commands (reserve and peek)
-    will return a Job instead of a dict. Also, this will wrap the connection,
-    so that you can have the job do its own commands (e.g. jobinst.release())
+    It is designed to be as flexible as possible, with a minimal number of extra
+    methods. (See below).  It has 4 protocl methods, for dealing with the
+    server via a connection object. It also has 2 methods, _serialize and
+    _unserialize for dealing with the data returned by beanstalkd. These
+    default to a simple yaml dump and load respectively.
 
-    A reccomended way for transforming beanstalk data into application data is
-    to make the data attribute a property, and have the _set_data() function
-    do all the relevant transforms. This is a fairly elegant use of properties,
-    avoiding the need to override the __init__ function.
+    One intent is that in simple applications, the Job class can be a
+    superclass or mixin, with a method run. In this case, the pybeanstalk.main()
+    loop will get a Job, call its run method, and when finished delete the job.
 
-    Also note, the _serialize and _unserialize methods are basic YAML
-    representations of data objects. It may be in your best interst to change
-    this. The pyYAML documentation is very good, and there is much you can
-    do to make this transformation work best for you.
-    See: http://pyyaml.org for more information.
+    In more complex applications, where the pybeanstalk.main is insufficient,
+    Job was designed so that processing data (e.g. data is more of a message),
+    can be handled within the specific data object (JobObj.data) or by external
+    means. In this case, Job is just a convenience class, to simplify job
+    management on the consumer end.
     '''
 
     def __init__(self, conn = None, jid=0, pri=0, data=''):
@@ -53,6 +52,9 @@ class Job(object):
 
     def _serialize(self):
         return yaml.dump(self.data)
+
+    def run(self):
+        raise NotImplemented('The Job.run method must be implemented in a subclass')
 
     def put(self):
         self._conn.put(self._serialize(), self.priority, self.delay)

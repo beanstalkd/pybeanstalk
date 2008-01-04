@@ -33,9 +33,8 @@ class ServerConn(object):
         self._socket.connect((self.server, self.port))
 
     def __writeline(self, line):
-        x = self._socket.send(line)
         try:
-            self._socket.fileno()
+            self._socket.sendall(line)
         except:
             raise protohandler.ProtoError
 
