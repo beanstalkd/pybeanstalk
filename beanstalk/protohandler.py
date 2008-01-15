@@ -1,7 +1,47 @@
 import yaml
+from errors import checkError
+import errors
 
-class FailureError(Exception): pass
-class ProtoError(Exception): pass
+def nsplit(line, n, sep = ' '):
+    x = tuple(line.split(sep, n))
+    blanks = len(x) - n
+    ret = x + ('',) * blanks
+    return ret
+
+def makeResponseHandler(ok, full=None, ok_args=[], full_args=[], \
+        expect_more=False, handle_extra=(lambda x: x)):
+    lookup = dict()
+    if ok and expect_more:
+        lookup[ok] = (ok_args,'ok', 'i')
+    elif ok:
+        lookup[ok] = (ok_args, 'burried', 'd')
+
+    if full:
+        lookup[full] = (full_args, 'd')
+
+    def handler(response):
+        # needs to be a full beanstalk proto line, with crlf stripped off
+        checkError(response)
+        response = response.split(' ')
+        word = response.pop(0)
+        try:
+            args, state, status = lookup[word]
+        except KeyError:
+            raise errors.UnexpectedResponse("Repsonse was: %s %s" % (word, ' '.join(response)))
+
+        if len(response) == len(args):
+            reply = dict(parse_data=handle_extra)
+            reply['state'] = state
+            for x in args:
+                n = response.pop(0)
+                try: n = int(n)
+                except: pass
+                reply[x] = n
+            return (status, reply)
+        else:
+            raise errors.UnexpectedResponse("Repsonse %s had too many args, got %s (expected %s)" %\
+                (word, len(repsonse), len(args)))
+    return handler
 
 class Proto(object):
     """
@@ -15,119 +55,28 @@ class Proto(object):
     def __init__(self):
         pass
 
-    def _nsplit(self, line, n, sep = ' '):
-        x = tuple(line.split(sep, n))
-        blanks = len(x) - n
-        ret = x + ('',) * blanks
-        return ret
-
-    def _protoerror(self, response = ''):
-        raise ProtoError('Unexpected response: "%s"' % (response,))
-
-    def _failure(self, response = 'not found'):
-        raise FailureError('Failure: "%s"' % (response,))
-
-    def make_generic_handler(self, ok = None, full = None, error = None):
-        """Create function to handle single word responses"""
-        def handler(response):
-            response = response.strip()
-            if response == ok:
-                return ('d', 0)
-            elif response == full:
-                handler.status = 'b'
-                return ('b', 0)
-            elif response == error:
-                self._failure()
-            else:
-                self._protoerror(response)
-        return handler
-
-    def make_job_handler(self, ok = None, error = None):
-        def handler(response):
-            if not hasattr(handler, 'status'):
-                infoline, rest = self._nsplit(response, 2, sep='\r\n')
-                rword, jid, pri, size = self._nsplit(infoline, 4)
-                if rword == ok:
-                    handler.status = 'i'
-                    size = int(size)
-                elif rword == error:
-                    self._failure(rword)
-                else:
-                    self._protoerror(response)
-                data = rest
-            else:
-                data = handler.data + response
-                pri = handler.pri
-                jid = handler.jid
-                size = handler.size
-
-            if not len(data) < size:
-                del handler.status
-                return ('d', dict(pri = pri, jid = jid,
-                        data = data.rstrip()))
-            else:
-                handler.pri = pri
-                handler.jid = jid
-                handler.size = size
-                handler.data = data
-                return ('i', (size + 2) - len(data))
-        return handler
-
-    def make_kick_handler(self):
-        def handler(response):
-            message, n = self._nsplit(response, 2, sep=' ')
-            if message.strip() == 'KICKED':
-                count = int(n.strip())
-                return ('d', count)
-            else:
-                self._protoerror(response)
-        return handler
-        return handler
-
-    def make_stats_handler(self):
-        error = 'NOT_FOUND'
-        ok = 'OK'
-
-        def handler(response):
-            if not hasattr(handler, 'status'):
-                startline, rest = self._nsplit(response, 2, sep='\r\n')
-                rword, size = self._nsplit(startline, 2, sep=' ')
-                if rword == ok:
-                    handler.status = 'i'
-                    size = int(size)
-                elif rword == error:
-                    self._failure(rword)
-                else:
-                    self._protoerror(response)
-                data = rest
-            else:
-                data = handler.data + response
-                size = handler.size
-
-            if not len(data) < size:
-                del handler.status
-                return ('d', yaml.load(data.rstrip('\r\n')))
-            else:
-                handler.size = size
-                handler.data = data
-                return ('i', (size + 2) - len(data))
-        return handler
-
-    def process_put(self, data, pri, delay):
+    def process_put(self, data, pri, delay, ttr):
         """
         put
             send:
-                put <pri> <delay> <bytes>
+                put <pri> <delay> <ttr> <bytes>
                 <data>
 
             return:
                 INSERTED
                 BURIED
+        NOTE: this function does a check for job size <= max job size, and
+        raises a protocol error when the size is too big.
         """
         dlen = len(data)
-        putline = 'put %(pri)s %(delay)s %(dlen)s\r\n%(data)s\r\n'
+        if dlen >= 2**16:
+            raise errors.JobTooBig('Job size is %s (max allowed is %s' %\
+                (dlen, 2**16))
+        putline = 'put %(pri)s %(delay)s %(ttr)s %(dlen)s\r\n%(data)s\r\n'
         putline %= locals()
-        handler = self.make_generic_handler(ok='INSERTED', full='BURRIED')
+        #handler = self.make_generic_handler(ok='INSERTED', full='BURRIED')
+        handler = makeResponseHandler(ok='INSERTED', ok_args=['jid'],
+            full='BURRIED')
         return (putline, handler)
 
     def process_reserve(self):
@@ -141,7 +90,9 @@ class Proto(object):
                 <data>
         """
         line = 'reserve\r\n'
-        handler = self.make_job_handler(ok='RESERVED')
+        handler = makeResponseHandler('RESERVED', ok_args=['jid','pri','bytes'],
+            expect_more=True)
+
         return (line, handler)
 
     def process_delete(self, jid):
@@ -155,7 +106,8 @@ class Proto(object):
                 NOT_FOUND
         """
         line = 'delete %s\r\n' % (jid,)
-        handler = self.make_generic_handler(ok='DELETED', error='NOT_FOUND')
+        handler = makeResponseHandler(ok='DELETED')
+
         return (line, handler)
 
     def process_release(self, jid, pri, delay):
@@ -170,7 +122,7 @@ class Proto(object):
                 NOT_FOUND
         """
         line = 'release %(jid)s %(pri)s %(delay)s\r\n' % locals()
-        handler = self.make_generic_handler(ok='RELEASED', full='BURIED', error='NOT_FOUND')
+        handler = makeResponseHandler(ok='RELEASED', full='BURIED')
         return (line, handler)
 
     def process_bury(self, jid, pri):
@@ -184,7 +136,7 @@ class Proto(object):
                 NOT_FOUND
         """
         line = 'bury %(jid)s %(pri)s\r\n' % locals()
-        handler = self.make_generic_handler(ok='BURIED', error='NOT_FOUND')
+        handler = makeResponseHandler(ok='BURIED')
         return (line, handler)
 
     def process_peek(self, jid = 0):
@@ -205,7 +157,8 @@ class Proto(object):
             line = 'peek %s\r\n' % (jid,)
         else:
             line = 'peek\r\n'
-        handler = self.make_job_handler(ok='FOUND', error='NOT_FOUND')
+        handler = makeResponseHandler(ok='FOUND',
+            ok_args=['jid','pri','bytes'], expect_more = True)
         return (line, handler)
 
     def process_kick(self, bound):
@@ -218,7 +171,7 @@ class Proto(object):
                 KICKED <count>
         """
         line = 'kick %s\r\n' % (bound,)
-        handler = self.make_kick_handler()
+        handler = makeResponseHandler(ok='KICKED', ok_args = ['count'])
         return (line, handler)
 
     def process_stats(self, jid = 0):
@@ -228,12 +181,14 @@ class Proto(object):
                 stats [<id>]
 
             return:
-                YAML struct
+                OK <bytes>
+                <data> (YAML struct)
         """
         if jid:
             line = 'stats %s\r\n' % (jid,)
         else:
             line = 'stats\r\n'
-        handler = self.make_stats_handler()
-        return (line, handler)
+        handler = makeResponseHandler(ok='OK', ok_args = ['bytes'],
+            expect_more = True, handle_extra = yaml.load)
 
+        return (line, handler)

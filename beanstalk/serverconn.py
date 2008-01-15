@@ -25,7 +25,7 @@ class ServerConn(object):
         self.server = server
         self.port = port
         self.proto = protohandler.Proto()
-        self.job = None
+        self.job = (lambda **x: x)
         self.__makeConn()
 
     def __makeConn(self):
@@ -41,16 +41,17 @@ class ServerConn(object):
     def _get_command(self):
         data = ''
         while True:
+            #print 'selecting...',
             x = select.select([self._socket],[],[], 1)
             if has_descriptor(x):
                 recv = self._socket.recv(1)
                 if not recv:
                     self._socket.close()
-                    raise protohandler.ProtoError("Remote host closed conn")
+                    raise errors.ProtoError("Remote host closed conn")
                 data += recv
                 if data.endswith('\r\n'):
                     break
-        return data
+        return data.rstrip('\r\n')
 
     def _get_response(self, handler):
         ''' keep in mind handler returns a tuple:
@@ -58,41 +59,44 @@ class ServerConn(object):
         '''
         command = self._get_command()
         status, result = handler(command)
-
-        while status == 'i':
-            remaining = result
-            x = select.select([self._socket],[],[], 1)
-            if has_descriptor(x):
-                get_amount = ((remaining < 20) and remaining) or 20
-                data = self._socket.recv(get_amount)
-                if not data:
-                    raise protohandler.ProtoError('Remotehost closed socket')
-                try:
-                    status, result = handler(data)
-                except Exception, e:
-                    print 'got exception! error is: %s' % (e,)
-                    raise
-
+        if status == 'i':
+            result['data'] = ''
+            expected = result['bytes']
+            result['data'] = result['parse_data'](self._get_data(expected))
+            result['status'] = 'd'
         return result
 
+    def _get_data(self, expected):
+        # include the clrf len for reading
+        expected += 2
+        res = ''
+        while expected:
+            data = self._socket.recv(expected)
+            if not data:
+                raise errors.ProtoError('Remote Host closed socket')
+            # sanity check
+            elif len(data) > expected:
+                raise errors.ExpectedCrlf('Server sent too much data')
+
+            expected -= len(data)
+            res += data
+
+        if not res.endswith('\r\n'):
+            raise errors.ExpectedCrlf('Server did not terminate data properly')
+
+        return res.rstrip('\r\n')
+
     def _do_interaction(self, line, handler):
-        print 'line is: %s handler is %s' % (line.strip(), handler)
         self.__writeline(line)
         return self._get_response(handler)
 
-    def handle_status(self, status):
-        if status == 'b':
-            print 'job burried'
-
-    def put(self, data, pri = 0, delay = 0):
-        return self._do_interaction(*self.proto.process_put(data, pri, delay))
+    def put(self, data, pri = 0, delay = 0, ttr = 100):
+        return self._do_interaction(
+            *self.proto.process_put(data, pri, delay, ttr))
 
     def reserve(self):
         x = self._do_interaction(*self.proto.process_reserve())
-        if self.job:
-            return self.job(conn=self,**x)
-        else:
-            return x
+        return self.job(conn=self,**x)
 
     def delete(self, jid):
         return self._do_interaction(*self.proto.process_delete(jid))
@@ -106,23 +110,25 @@ class ServerConn(object):
 
     def peek(self, jid = 0):
         x = self._do_interaction(*self.proto.process_peek(jid))
-        if self.job:
-            return self.job(conn = self,**x)
-        else:
-            return x
+        return self.job(conn = self,**x)
 
     def kick(self, bound = 0 ):
         return self._do_interaction(*self.proto.process_kick(bound))
 
     def stats(self, jid = 0):
-        return self._do_interaction(*self.proto.process_stats(jid))
+        x = self._do_interaction(*self.proto.process_stats(jid))
+        print "STATS IS: %s" % x
+        return x
 
 # poor testing stuff follows, should probably be extended :)
 if __name__ == '__main__':
     x = ServerConn('192.168.2.1', 11300)
-    x.put('python test\nthings!')
-    x.put('python test\nstuff!')
-    x.put('python test\nyaitem')
+    jid = x.put('python test\nthings!')
+    print 'put jid %s' % (jid,)
+    jid = x.put('python test\nstuff!')
+    print 'put jid %s' % (jid,)
+    jid = x.put('python test\nyaitem')
+    print 'put jid %s' % (jid,)
     job = x.reserve()
     x.bury(job['jid'])
     job = x.reserve()
@@ -137,3 +143,4 @@ if __name__ == '__main__':
     kicked = x.reserve()
     print kicked
     x.delete(kicked['jid'])
+    print x.stats()

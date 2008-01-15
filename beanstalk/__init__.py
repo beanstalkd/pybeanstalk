@@ -1,8 +1,9 @@
 import job
 
 def daemonize(nchildren=0):
+    pass
 
-def main(conn)
+def main(conn):
     while True:
         job = conn.reserve()
         try:

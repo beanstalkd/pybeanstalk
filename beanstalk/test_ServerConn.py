@@ -9,7 +9,7 @@ There is a strong possibility of side effects from failing tests breaking
 others.  Probably best to setup a new beanstalkd at each test.
 """
 
-import os
+import os, sys
 import signal
 import socket
 import time
@@ -17,10 +17,12 @@ import pprint
 
 from nose.tools import with_setup
 
-from beanstalk import serverconn
+#from beanstalk import serverconn
+import serverconn
 
 
 # details of test server we spawn
+BPATH = '/home/sophacles/beanstalk/beanstalkd-0.6/'
 BEANSTALKD = 'beanstalkd'
 BEANSTALKD_PORT = 11301
 BEANSTALKD_HOST = '127.0.0.1'
@@ -33,9 +35,9 @@ conn = None
 
 def setup():
     global server_pid, conn
-    server_pid = os.spawnlp(os.P_NOWAIT,
-                            BEANSTALKD,
-                            BEANSTALKD,
+    server_pid = os.spawnl(os.P_NOWAIT,
+                            os.path.join(BPATH,BEANSTALKD),
+                            os.path.join(BPATH,BEANSTALKD),
                             '-l', BEANSTALKD_HOST,
                             '-p', str(BEANSTALKD_PORT)
                             )
@@ -61,14 +63,14 @@ def test_ServerConn_fails_to_connect_with_a_reasonable_exception():
 def _test_put_reserve_delete_a_job(payload, pri):
 
     # check preconditions
-    assert conn.stats()['current-jobs-ready'] == 0, "The server is not empty "\
+    assert conn.stats()['data']['current-jobs-ready'] == 0, "The server is not empty "\
            "of jobs so test behaviour cannot be guaranteed.  Bailing out."
 
     # create a job
     put_id = conn.put(payload, pri)
     print "created a job with id", put_id
 
-    assert conn.stats()['current-jobs-ready'] == 1
+    assert conn.stats()['data']['current-jobs-ready'] == 1
 
     # reserve it
     res = conn.reserve()
@@ -78,21 +80,21 @@ def _test_put_reserve_delete_a_job(payload, pri):
     assert res['pri'] == pri
 
     # delete it
-    conn.delete(res['id'])
-    assert conn.stats()['current-jobs-ready'] == 0, "job was not deleted"
+    conn.delete(res['jid'])
+    assert conn.stats()['data']['current-jobs-ready'] == 0, "job was not deleted"
 
 
 def _test_put_reserve_release_a_job(payload, pri):
 
     # check preconditions
-    assert conn.stats()['current-jobs-ready'] == 0, "The server is not empty "\
+    assert conn.stats()['data']['current-jobs-ready'] == 0, "The server is not empty "\
            "of jobs so test behaviour cannot be guaranteed.  Bailing out."
 
     # create a job
     put_id = conn.put(payload, pri)
     print "created a job with id", put_id
 
-    assert conn.stats()['current-jobs-ready'] == 1
+    assert conn.stats()['data']['current-jobs-ready'] == 1
 
     # reserve it
     res = conn.reserve()
@@ -102,8 +104,8 @@ def _test_put_reserve_release_a_job(payload, pri):
     assert res['pri'] == pri
 
     # release it
-    conn.release(res['id'])
-    assert conn.stats()['current-jobs-ready'] == 1, "job was not released"
+    conn.release(res['jid'])
+    assert conn.stats()['data']['current-jobs-ready'] == 1, "job was not released"
 
     # reserve again
     res = conn.reserve()
@@ -113,8 +115,8 @@ def _test_put_reserve_release_a_job(payload, pri):
     assert res['pri'] == pri
 
     # delete it
-    conn.delete(res['id'])
-    assert conn.stats()['current-jobs-ready'] == 0, "job was not deleted"
+    conn.delete(res['jid'])
+    assert conn.stats()['data']['current-jobs-ready'] == 0, "job was not deleted"
 
 
 # Test Cases:
@@ -122,13 +124,13 @@ def _test_put_reserve_release_a_job(payload, pri):
 def test_ServerConn_can_put_reserve_delete_a_simple_job():
     _test_put_reserve_delete_a_job('abcdef', 0)
 
-#def test_ServerConn_can_put_reserve_delete_a_long_job():
-#    # FAILS: unexpected empty response on delete
-#    _test_put_reserve_delete_a_job('abc'*100, 0)
+def test_ServerConn_can_put_reserve_delete_a_long_job():
+    # FAILS: unexpected empty response on delete
+    _test_put_reserve_delete_a_job('abc'*100, 0)
 
-#def test_ServerConn_can_put_reserve_delete_a_nasty_job():
-#    # FAILS: should the library expect the client to escape ?
-#    _test_put_reserve_delete_a_job('abc\r\nabc', 0)
+def test_ServerConn_can_put_reserve_delete_a_nasty_job():
+    # FAILS: should the library expect the client to escape ?
+    _test_put_reserve_delete_a_job('abc\r\nabc', 0)
 
 def test_ServerConn_can_put_reserve_release_a_simple_job():
     _test_put_reserve_release_a_job('abcdef', 0)

@@ -1,7 +1,8 @@
 import yaml
-from protohandler import FailureError
+from errors import FailureError
 
 DEFALUT_CONN = None
+
 class Job(object):
     ''' class Job is and optional class for keeping track of jobs returned
     by the beanstalk server.
@@ -23,7 +24,7 @@ class Job(object):
     management on the consumer end.
     '''
 
-    def __init__(self, conn = None, jid=0, pri=0, data=''):
+    def __init__(self, conn = None, jid=0, pri=0, data='', state = 'ok',**kw):
         print "job initialized: conn: %s, id: %s, pri: %s, data: %s" %\
             (conn, jid, pri, data)
         if not conn and not DEFAULT_CONN:
@@ -31,10 +32,11 @@ class Job(object):
         elif not conn:
             self._conn = DEFAULT_CONN
         else:
-            self._conn = conn
+            self.conn = conn
         self.id = jid
         self.priority = pri
         self.delay = 0
+        self.state = state
         if data:
             self._unserialize(data)
         else:
@@ -57,19 +59,21 @@ class Job(object):
         raise NotImplemented('The Job.run method must be implemented in a subclass')
 
     def put(self):
-        self._conn.put(self._serialize(), self.priority, self.delay)
+        self.conn.put(self._serialize(), self.priority, self.delay)
 
     def release(self, delay = 0):
         try:
-            self._conn.release(self.id, self.priority, delay)
-        except FailureError:
+            self.conn.release(self.id, self.priority, delay)
+        except errors.NotFound:
             return False
+        except:
+            raise
         else:
             return True
 
     def delete(self):
         try:
-            self._conn.delete(self.id)
+            self.conn.delete(self.id)
         except FailureError:
             return False
         else:
@@ -80,7 +84,7 @@ class Job(object):
             self.pri = newpri
 
         try:
-            self._conn.bury(self.id, newpri)
+            self.conn.bury(self.id, newpri)
         except FalureError:
             return False
         else:
