@@ -1,0 +1,17 @@
+﻿This is the current todo list as of packaging the release. For a more current
+list, please see: http://code.google.com/p/pybeanstalk/wiki/TODO
+The big things:
+ * Event based (libevent) client
+ * Twisted Client
+ * Simple mainloop layer
+ * docs
+ * support for upcoming beanstalk 0.8 release
+
+The little things:
+ * better unit testing
+ * usage examples
+ * api review
+ * add to PyPi
+ * eggify it
+ * .dpkg it
+ * .rpm it
