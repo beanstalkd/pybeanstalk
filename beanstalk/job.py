@@ -74,8 +74,10 @@ class Job(object):
     def delete(self):
         try:
             self.conn.delete(self.id)
-        except FailureError:
+        except errors.NotFound:
             return False
+        except:
+            raise
         else:
             return True
 
@@ -85,8 +87,10 @@ class Job(object):
 
         try:
             self.conn.bury(self.id, newpri)
-        except FalureError:
+        except errors.NotFound:
             return False
+        except:
+            raise
         else:
             return True
 

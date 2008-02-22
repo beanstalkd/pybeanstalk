@@ -14,10 +14,10 @@ def makeResponseHandler(ok, full=None, ok_args=[], full_args=[], \
     if ok and expect_more:
         lookup[ok] = (ok_args,'ok', 'i')
     elif ok:
-        lookup[ok] = (ok_args, 'burried', 'd')
+        lookup[ok] = (ok_args, 'ok', 'd')
 
     if full:
-        lookup[full] = (full_args, 'd')
+        lookup[full] = (full_args, 'buried', 'd')
 
     def handler(response):
         # needs to be a full beanstalk proto line, with crlf stripped off
@@ -39,7 +39,7 @@ def makeResponseHandler(ok, full=None, ok_args=[], full_args=[], \
                 reply[x] = n
             return (status, reply)
         else:
-            raise errors.UnexpectedResponse("Repsonse %s had too many args, got %s (expected %s)" %\
+            raise errors.UnexpectedResponse("Repsonse %s had wrong args, got %s (expected %s)" %\
                 (word, len(repsonse), len(args)))
     return handler
 
@@ -48,7 +48,7 @@ class Proto(object):
         Protocol handler for processing the beanstalk protocol
 
         See reference at:
-            http://xph.us/software/beanstalkd/protocol.txt (as of Dec 14, 2007)
+            http://xph.us/software/beanstalkd/protocol.txt (as of Feb 2, 2008)
 
     """
 
@@ -63,8 +63,8 @@ class Proto(object):
                 <data>
 
             return:
-                INSERTED
-                BURIED
+                INSERTED <jid>
+                BURIED <jid>
         NOTE: this function does a check for job size <= max job size, and
         raises a protocol error when the size is too big.
         """
@@ -74,9 +74,8 @@ class Proto(object):
                 (dlen, 2**16))
         putline = 'put %(pri)s %(delay)s %(ttr)s %(dlen)s\r\n%(data)s\r\n'
         putline %= locals()
-        #handler = self.make_generic_handler(ok='INSERTED', full='BURRIED')
         handler = makeResponseHandler(ok='INSERTED', ok_args=['jid'],
-            full='BURRIED')
+            full='BURIED', full_args=['jid'])
         return (putline, handler)
 
     def process_reserve(self):
@@ -151,7 +150,7 @@ class Proto(object):
                 <data>
 
         NOTE: as of beanstalk 0.5, peek without and id param will return the
-              first burried job, this is extremely likely to change
+              first buried job, this is extremely likely to change
         """
         if jid:
             line = 'peek %s\r\n' % (jid,)
@@ -188,7 +187,7 @@ class Proto(object):
             line = 'stats %s\r\n' % (jid,)
         else:
             line = 'stats\r\n'
-        handler = makeResponseHandler(ok='OK', ok_args = ['bytes'],
-            expect_more = True, handle_extra = yaml.load)
+        handler = makeResponseHandler(ok='OK', ok_args=['bytes'],
+            expect_more=True, handle_extra=yaml.load)
 
         return (line, handler)

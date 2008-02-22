@@ -1,6 +1,8 @@
 import socket, select
 import protohandler
 
+_debug = 1
+
 def has_descriptor(iterable):
     for x in iterable:
         for y in x:
@@ -21,12 +23,15 @@ class ServerConn(object):
     to be used as a callback. This should greatly simplify the writing of a
     twisted or libevent serverconn class'''
 
-    def __init__(self, server, port):
+    def __init__(self, server, port, job = False):
         self.server = server
         self.port = port
         self.proto = protohandler.Proto()
-        self.job = (lambda **x: x)
+        self.job = job or (lambda **x: x)
         self.__makeConn()
+
+    def fileno(self):
+        return self._socket.fileno()
 
     def __makeConn(self):
         self._socket = socket.socket()
@@ -117,30 +122,45 @@ class ServerConn(object):
 
     def stats(self, jid = 0):
         x = self._do_interaction(*self.proto.process_stats(jid))
-        print "STATS IS: %s" % x
         return x
 
-# poor testing stuff follows, should probably be extended :)
-if __name__ == '__main__':
-    x = ServerConn('192.168.2.1', 11300)
-    jid = x.put('python test\nthings!')
-    print 'put jid %s' % (jid,)
-    jid = x.put('python test\nstuff!')
-    print 'put jid %s' % (jid,)
-    jid = x.put('python test\nyaitem')
-    print 'put jid %s' % (jid,)
-    job = x.reserve()
-    x.bury(job['jid'])
-    job = x.reserve()
-    x.release(job['jid'], job['pri'])
-    for i in range(2):
-        job = x.reserve()
-        x.delete(job['jid'])
-    burried = x.peek()
-    if burried:
-        print burried
-    x.kick(1)
-    kicked = x.reserve()
-    print kicked
-    x.delete(kicked['jid'])
-    print x.stats()
+
+class ThreadedConn(ServerConn):
+    def __init__(self, *args, **kw):
+        if 'pool' in kw:
+            self.__pool = kw.pop('pool')
+        super(ThreadedConn, self).__init__(*args, **kw)
+
+    def __del__(self):
+        self.__pool.release(self)
+
+class ThreadedConnPool(object):
+    '''
+    ThreadedConnPool: A simple pool class for connection objects).
+    This object will create a pool of size nconns. It does no thread wrangling,
+    and no form of connection management, other than to get a unique connection
+    to the thread that calls get.  In fact this could probably be simplified
+    even more by subclassing Semaphore.
+    '''
+    def __init__(self, nconns, server, port, job = False):
+        self.__conns = list()
+        self.__lock = threading.Lock()
+        if threaded: conntype = ThreadedConn
+        else: conntype = ServerConn
+        for a in range(nconns):
+            self.conns.append(conntype(server, port, job=job, pool=self))
+
+        self.useme = threading.Semaphore(nconns)
+
+    def get(self):
+        self.useme.aquire()
+        self.lock.acquire()
+        ret = self.conns.pop(0)
+        self.lock.release()
+
+    def release(self, conn):
+        self.lock.acquire()
+        self.conns.append(conn)
+        self.lock.release()
+        self.useme.release()
+
