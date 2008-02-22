@@ -1,0 +1,28 @@
+PyBeanstalk:
+Copyright 2008
+
+A client library for beanstalkd. beanstalkd is a lightweight queuing daemon
+based on libevent. It is meant to be used across multiple systems, and takes
+inspiration from memcache. More details on beanstalk can be found at:
+http://xph.us/software/beanstalkd/
+
+This client library aims to be simple and extensible. It curently provides no
+fancy wrappers, or e.g. thread-wrangling
+
+To install, just run python setup.py install from this directory.
+
+
+Copyright notice:
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program (In file named COPYING).  If not, see <http://www.gnu.org/licenses/>.
