@@ -1,7 +1,7 @@
 import yaml
 from errors import FailureError
 
-DEFALUT_CONN = None
+DEFAULT_CONN = None
 
 class Job(object):
     ''' class Job is and optional class for keeping track of jobs returned
