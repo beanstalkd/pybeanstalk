@@ -151,7 +151,7 @@ def check_line(l1, l2):
 def check_handler(handlerfunc, response, cv):
     l = 0
     while True:
-        l = handlerfunc.throw(Exception)
+        l = protohandler.data_remaining(handlerfunc)
         y = handlerfunc.send(response[:l])
         response = response[l:]
         if y:

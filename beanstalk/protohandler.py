@@ -123,7 +123,7 @@ def interaction(*args, **kw):
     return deco
 
 def data_remaining(handler):
-    return h.throw(ExpectedData)
+    return handler.throw(ExpectedData)
 
 @interaction(ok='INSERTED', ok_args=['jid'], full='BURIED', full_args=['jid'])
 def process_put(data, pri=1, delay=0, ttr=60):
