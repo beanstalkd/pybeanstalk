@@ -1,100 +1,174 @@
+import sys
+print >>sys.stderr,sys.version
+sys.path.append('..')
 from nose import with_setup, tools
 from beanstalk import protohandler
 from beanstalk import errors
 
-proto = protohandler.Proto()
 
-def check_result(result, **kw):
-    try:
-        tstatus = kw.pop('status')
-    except:
-        tstatus = 'd'
+prototest_info = [
+    [
+        ('process_put', ('test_data', 0, 0, 10)),
+        "put 0 0 10 %s\r\ntest_data\r\n" % (len('test_data'),),
+        [
+            ('INSERTED 3\r\n', {'state':'ok','jid':3}),
+            ('BURIED 3\r\n', {'state':'buried','jid':3})
+        ]
+    ],
+    [
+        ('process_use', ('bar',)),
+        'use bar\r\n',
+        [
+            ('USING bar\r\n', {'state':'ok', 'tube':'bar'})
+        ]
+    ],
+    [
+        ('process_reserve', ()),
+        'reserve\r\n',
+        [
+            ('RESERVED 12 5\r\nabcde\r\n',{'state':'ok', 'bytes': 5, 'jid':12,
+                'data':'abcde'})
+        ]
+    ],
+    [
+        ('process_delete', (12,)),
+        'delete 12\r\n',
+        [
+            ('DELETED\r\n',{'state':'ok'})
+        ]
+    ],
+    [
+        ('process_release', (33,22,17)),
+        'release 33 22 17\r\n',
+        [
+            ('RELEASED\r\n',{'state':'ok'}),
+            ('BURIED\r\n',{'state':'buried'})
+        ]
+    ],
+    [
+        ('process_bury', (29, 21)),
+        'bury 29 21\r\n',
+        [
+            ('BURIED\r\n',{'state':'ok'})
+        ]
+    ],
+    [
+        ('process_watch', ('supertube',)),
+        'watch supertube\r\n',
+        [
+            ('WATCHING 5\r\n',{'state':'ok','count': 5})
+        ]
+    ],
+    [
+        ('process_ignore', ('supertube',)),
+        'ignore supertube\r\n',
+        [
+            ('WATCHING 3\r\n', {'state':'ok', 'count':3})
+            #('NOT_IGNORED',{'state':'buried'})
+        ]
+    ],
+    [
+        ('process_peek', (39,)),
+        'peek 39\r\n',
+        [
+            ("FOUND 39 10\r\nabcdefghij\r\n", {'state':'ok', 'jid':39,
+                'bytes':10, 'data':'abcdefghij'})
+        ]
+    ],
+    [
+        ('process_peek', ()),
+        'peek\r\n',
+        [
+            ("FOUND 9 10\r\nabcdefghij\r\n",{'state':'ok', 'jid':9, 'bytes':10,
+                'data':'abcdefghij'})
+        ]
+    ],
+    [
+        ('process_kick', (200,)),
+        'kick 200\r\n',
+        [
+            ("KICKED 59\r\n",{'state':'ok', 'count':59})
+        ]
+    ],
+    [
+        ('process_stats', ()),
+        'stats\r\n',
+        [
+            ('OK 15\r\n---\ntest: good\n\r\n', {'state':'ok', 'bytes':15,
+                'data':{'test':'good'}})
+        ]
+    ],
+    [
+        ('process_stats_tube', ('barbaz',)),
+        'stats-tube barbaz\r\n',
+        [
+            ('OK 15\r\n---\ntest: good\n\r\n',{'state':'ok', 'bytes':15,
+                            'data':{'test':'good'}})
 
-    tres = {'state':'ok'}
-    tres.update(kw)
+        ]
+    ],
+    [
+        ('process_stats_job', (19,)),
+        'stats-job 19\r\n',
+        [
+            ('OK 15\r\n---\ntest: good\n\r\n',{'state':'ok', 'bytes':15,
+                'data':{'test':'good'}})
 
-    # result of handle call comes as (state, resdict)
-    status, res = result
+        ]
+    ],
+    [
+        ('process_list_tubes', ()),
+        'list-tubes\r\n',
+        [
+            ('OK 20\r\n---\n- default\n- foo\n\r\n', {'state':'ok', 'bytes':20,
+                'data':['default','foo']})
+        ]
+    ],
+    [
+        ('process_list_tube_used',()),
+        'list-tube-used\r\n',
+        [
+            ('USING bar\r\n', {'state':'ok', 'tube':'bar'})
+        ]
+    ],
+    [
+        ('process_list_tubes_watched', ()),
+        'list-tubes-watched\r\n',
+        [
+            ('OK 20\r\n---\n- default\n- foo\n\r\n',{'state':'ok', 'bytes':20,
+                'data':['default','foo']})
 
-    print 'status is %s, tstatus is %s' % (status, tstatus)
-    assert status == tstatus
-    # dont need the parse_data function other than to know its there
-    res.pop('parse_data')
-    assert res == tres
+        ]
+    ]
+]
 
-def test_put():
-    line, handler = proto.process_put('test data',0,0,0)
-    t ="put 0 0 0 %s\r\ntest data\r\n" % (len('test data'),)
-    assert line == t
-    check_result(handler("INSERTED 3"), jid=3)
-    check_result(handler("BURIED 3"), jid=3, state='buried')
 
+
+
+def check_line(l1, l2):
+    assert l1 == l2
+
+def check_handler(handlerfunc, response, cv):
+    l = 0
+    while True:
+        l = handlerfunc.throw(Exception)
+        y = handlerfunc.send(response[:l])
+        response = response[l:]
+        if y:
+            assert y == cv
+            break
+    return
+
+def test_interactions():
+    for test in prototest_info:
+        callinfo, commandline, responseinfo = test
+        func = getattr(protohandler, callinfo[0])
+        args = callinfo[1]
+        for response, resultcomp in responseinfo:
+            line, handler = func(*args)
+            yield check_line, line, commandline
+            yield check_handler, handler, response, resultcomp
+
+def test_put_extra():
     #check that the put raises the right error on big jobs...
-    tools.assert_raises(errors.JobTooBig, proto.process_put,'a' * (2**16),0,0,0)
-
-def test_reserve():
-    line, handler = proto.process_reserve()
-    t = 'reserve\r\n'
-    assert line == t
-
-    check_result(handler('RESERVED 12 23 88'),
-        status='i', jid=12, pri=23, bytes=88)
-
-def test_delete():
-    line, handler = proto.process_delete(12)
-    t = 'delete 12\r\n'
-    assert line == t
-
-    check_result(handler('DELETED'))
-    tools.assert_raises(errors.NotFound, handler, 'NOT_FOUND')
-
-def test_release():
-    line, handler = proto.process_release(33,22,17)
-    t = 'release 33 22 17\r\n'
-    assert line == t
-
-    check_result(handler('RELEASED'))
-    check_result(handler('BURIED'), state='buried')
-    tools.assert_raises(errors.NotFound, handler, 'NOT_FOUND')
-
-def test_bury():
-    line, handler = proto.process_bury(29, 21)
-    t = 'bury 29 21\r\n'
-    assert line == t
-    check_result(handler('BURIED'))
-    tools.assert_raises(errors.NotFound, handler, 'NOT_FOUND')
-
-def test_peek_a():
-    line, handler = proto.process_peek()
-    t = 'peek\r\n'
-    assert line == t
-
-    # make sure that the line is correct when a jid is added
-    line, handler = proto.process_peek(39)
-    t = 'peek 39\r\n'
-    assert line == t
-
-    check_result(handler("FOUND 39 29999 29990"),
-        status='i', jid=39, pri=29999, bytes=29990)
-    tools.assert_raises(errors.NotFound, handler, 'NOT_FOUND')
-
-def test_kick():
-    line, handler = proto.process_kick(200)
-    t = 'kick 200\r\n'
-    assert line == t
-    check_result(handler("KICKED 59"), count=59)
-
-def test_stats():
-    import yaml
-    line, handler = proto.process_stats(23)
-    t = 'stats 23\r\n'
-    assert line == t
-    #other way of process_stats happening...
-    line, handler = proto.process_stats()
-    t = 'stats\r\n'
-    assert line == t
-    # make sure that the result of a handler call has the right data processer
-    assert handler('OK 22')[1]['parse_data'] is yaml.load
-    # make sure everything else is right
-    check_result(handler('OK 2200'), bytes=2200, status='i')
-
+    tools.assert_raises(errors.JobTooBig, protohandler.process_put,'a' * (2**16),0,0,0)

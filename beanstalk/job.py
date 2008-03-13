@@ -1,7 +1,16 @@
+from functools import wraps
 import yaml
-from errors import FailureError
+from errors import FailureError, JobError
 
 DEFAULT_CONN = None
+
+def honorimmutable(func):
+    @wraps(func)
+    def deco(*args, **kw):
+        if args[0]._imutable:
+            raise JobError("Cannot do that to a job you don't own")
+        return func(*args, **kw)
+    return deco
 
 class Job(object):
     ''' class Job is and optional class for keeping track of jobs returned
@@ -25,8 +34,6 @@ class Job(object):
     '''
 
     def __init__(self, conn = None, jid=0, pri=0, data='', state = 'ok',**kw):
-        print "job initialized: conn: %s, id: %s, pri: %s, data: %s" %\
-            (conn, jid, pri, data)
         if not conn and not DEFAULT_CONN:
             raise AttributeError("No connection specified")
         elif not conn:
@@ -42,8 +49,12 @@ class Job(object):
         else:
             self.data = ''
 
+        self._imutable = bool(kw.get('imutable'), False)
+        self._from_queue = bool(kw.get('from_queue', False))
+        self.tube = kw.get('tube', 'default')
+
     def __del__(self):
-        self.delete()
+        self.Delete()
         super(Job, self).__del__()
 
     def __str__(self):
@@ -58,10 +69,31 @@ class Job(object):
     def run(self):
         raise NotImplemented('The Job.run method must be implemented in a subclass')
 
-    def put(self):
+    def Queue(self):
+        if self._from_queue:
+            self.Delay(self.delay)
+            return
+        oldtube = self.conn.current_tube
+        if oldtube != self.tube:
+            self.conn.use(self.tube)
         self.conn.put(self._serialize(), self.priority, self.delay)
+        if oldtube != self.tube:
+            self.conn.use(oldtube)
 
-    def release(self, delay = 0):
+
+    @honorimmutable
+    def Return(self):
+        try:
+            self.conn.release(self.id, self.priority, 0)
+        except errors.NotFound:
+            return False
+        except:
+            raise
+        else:
+            return True
+
+    @honorimmutable
+    def Delay(self, delay):
         try:
             self.conn.release(self.id, self.priority, delay)
         except errors.NotFound:
@@ -71,7 +103,8 @@ class Job(object):
         else:
             return True
 
-    def delete(self):
+    @honorimmutable
+    def Finish(self):
         try:
             self.conn.delete(self.id)
         except errors.NotFound:
@@ -81,7 +114,8 @@ class Job(object):
         else:
             return True
 
-    def bury(self, newpri = 0):
+    @honorimmutable
+    def Bury(self, newpri = 0):
         if newpri:
             self.pri = newpri
 
@@ -93,4 +127,17 @@ class Job(object):
             raise
         else:
             return True
+
+    @property
+    def Info(self):
+        try:
+            stats=self.conn.stats_job(self.id)
+        except:
+            raise
+        else:
+            return stats
+
+def newJob(**kw):
+    kw['from_queue'] = False
+    return Job(**kw)
 

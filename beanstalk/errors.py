@@ -1,4 +1,5 @@
 class FailureError(Exception): pass
+class JobError(FailureError): pass
 
 class BeanStalkError(Exception): pass
 class ProtoError(BeanStalkError): pass
@@ -13,6 +14,7 @@ class UnknownCommand(ProtoError): pass
 class ExpectedCrlf(ProtoError): pass
 class JobTooBig(ProtoError): pass
 class NotFound(ProtoError): pass
+class NotIgnored(ProtoError): pass
 
 class UnexpectedResponse(ProtoError): pass
 
