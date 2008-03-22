@@ -6,8 +6,9 @@ based on libevent. It is meant to be used across multiple systems, and takes
 inspiration from memcache. More details on beanstalk can be found at:
 http://xph.us/software/beanstalkd/
 
-This client library aims to be simple and extensible. It curently provides no
-fancy wrappers, or e.g. thread-wrangling
+This client library aims to be simple and extensible. It curently provides
+nothing more than an interface to the protocol over a socktet, or e.g.
+thread-wrangling
 
 To install, just run python setup.py install from this directory.
 

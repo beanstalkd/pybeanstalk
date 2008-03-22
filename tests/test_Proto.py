@@ -172,3 +172,4 @@ def test_interactions():
 def test_put_extra():
     #check that the put raises the right error on big jobs...
     tools.assert_raises(errors.JobTooBig, protohandler.process_put,'a' * (2**16),0,0,0)
+

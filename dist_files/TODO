@@ -6,7 +6,6 @@ The big things:
  * Twisted Client
  * Simple mainloop layer
  * docs
- * support for upcoming beanstalk 0.8 release
 
 The little things:
  * better unit testing

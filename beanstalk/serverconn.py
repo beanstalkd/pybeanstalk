@@ -19,7 +19,6 @@ class ServerConn(object):
     def __init__(self, server, port, job = False):
         self.server = server
         self.port = port
-        self.proto = protohandler.Proto()
         self.job = job or (lambda **x: x)
         self.poller = select.poll()
         self.__makeConn()
@@ -63,8 +62,17 @@ class ServerConn(object):
     def _get_watchlist(self):
         return self.list_tubes_watched()['data']
     def _set_watchlist(self, seq):
-        for x in seq:
+        if len(seq) == 0:
+            seq.append('default')
+        seq = set(seq)
+        current = set(self._get_watchlist())
+        add = seq - current
+        rem = current - seq
+
+        for x in add:
             self.watch(x)
+        for x in rem:
+            self.ignore(x)
         return
     watchlist = property(_get_watchlist, _set_watchlist)
 

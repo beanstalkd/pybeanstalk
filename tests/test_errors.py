@@ -16,7 +16,7 @@ def test_checkError():
                  (errors.UnknownCommand, 'UNKNOWN_COMMAND'),
                  (errors.ExpectedCrlf, 'EXPECTED_CRLF'),
                  (errors.JobTooBig, 'JOB_TOO_BIG'),
-                 (errors.NotFound, 'NOT_FOUND')]
+                 (errors.NotFound, 'NOT_FOUND'),
                  (errors.NotIgnored, 'NOT_IGNORED')]
 
     for error, rstring in errorlist:

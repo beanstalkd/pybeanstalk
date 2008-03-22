@@ -15,8 +15,10 @@ import time
 import pprint
 
 from nose.tools import with_setup
+import nose
 
 from beanstalk import serverconn
+from beanstalk import errors
 import config
 
 
@@ -51,22 +53,26 @@ def _test_put_reserve_delete_a_job(payload, pri):
            "of jobs so test behaviour cannot be guaranteed.  Bailing out."
 
     # create a job
-    put_id = conn.put(payload, pri)
+    put_id = conn.put(payload, pri)['jid']
     print "created a job with id", put_id
 
     assert conn.stats()['data']['current-jobs-ready'] == 1
+    assert conn.stats_job(put_id)['data']['state'] == 'ready'
 
     # reserve it
     res = conn.reserve()
     print "reserved a job", res
 
     assert res['data'] == payload
-    assert res['pri'] == pri
-    assert res['jid'] == put_id['jid']
+    assert res['jid'] == put_id
+    jstats = conn.stats_job(res['jid'])['data']
+    assert jstats['pri'] == pri
+    assert jstats['state'] == 'reserved'
 
     # delete it
     conn.delete(res['jid'])
     assert conn.stats()['data']['current-jobs-ready'] == 0, "job was not deleted"
+    nose.tools.assert_raises(errors.NotFound, conn.stats_job, res['jid'])
 
 
 def _test_put_reserve_release_a_job(payload, pri):
@@ -75,7 +81,7 @@ def _test_put_reserve_release_a_job(payload, pri):
            "of jobs so test behaviour cannot be guaranteed.  Bailing out."
 
     # create a job
-    put_id = conn.put(payload, pri)
+    put_id = conn.put(payload, pri)['jid']
     print "created a job with id", put_id
 
     assert conn.stats()['data']['current-jobs-ready'] == 1
@@ -85,20 +91,19 @@ def _test_put_reserve_release_a_job(payload, pri):
     print "reserved a job", res
 
     assert res['data'] == payload
-    assert res['pri'] == pri
-    assert res['jid'] == put_id['jid']
+    assert res['jid'] == put_id
 
     # release it
     conn.release(res['jid'])
     assert conn.stats()['data']['current-jobs-ready'] == 1, "job was not released"
+    assert conn.stats_job(put_id)['data']['state'] == 'ready'
 
     # reserve again
     res = conn.reserve()
     print "reserved a job", res
 
     assert res['data'] == payload
-    assert res['pri'] == pri
-    assert res['jid'] == put_id['jid']
+    assert res['jid'] == put_id
 
     # delete it
     conn.delete(res['jid'])
@@ -135,16 +140,21 @@ def test_ServerConn_can_bury_and_kick_a_job():
     bury = conn.bury(res['jid'])
     assert conn.stats()['data']['current-jobs-buried'] == 1, \
         "job was not buried"
+    assert conn.stats_job(put['jid'])['data']['state'] == 'buried'
 
     # kick it back into the queue
     print 'kicking'
-    kick = conn.kick(res['jid'])
+    kick = conn.kick(1)
     assert conn.stats()['data']['current-jobs-ready'] == 1, "job was not kicked"
 
     # Need to reget the job, then delete it
     job = conn.reserve()
     #while we are here, a sanity check to make sure the job is re-gettable
-    assert job['jid'] == res['jid']
+    assert job == res, 'second job get is different from origninal get'
+    jstats = conn.stats_job(job['jid'])['data']
+    assert jstats['buries'] == 1
+    assert jstats['kicks'] == 1
+
     delete = conn.delete(res['jid'])
 
     assert conn.stats()['data']['current-jobs-ready'] == 0, "job was not deleted"
@@ -157,3 +167,46 @@ def test_ServerConn_fails_to_connect_with_a_reasonable_exception():
                               config.BEANSTALKD_PORT+1)
     except socket.error, reason:
         pass
+
+def test_tube_operations():
+    assert conn.stats()['data']['current-jobs-ready'] == 0, "The server is not empty "\
+           "of jobs so test behaviour cannot be guaranteed.  Bailing out."
+    # first make sure its watching default
+    assert conn.watchlist == ['default']
+
+    testlist = ['foo','bar','baz']
+    conn.watchlist = testlist
+    # ordering may not be garunteed, sets dont care!
+    assert set(conn.watchlist) == set(testlist)
+    assert set(conn.list_tubes_watched()['data']) == set(testlist)
+
+    #use test
+    assert conn.tube == 'default'
+    # a dummy job for when we test a different tube...
+    dummy_id = conn.put('dummy')['jid']
+
+    conn.use('bar')
+    assert conn.tube == 'bar'
+
+    jid = conn.put('this is data', pri=100)['jid']
+    assert conn.stats_tube('bar')['data']['current-jobs-ready'] == 1
+
+    assert conn.stats()['data']['current-jobs-ready'] == 2
+    # because the protocol blocks when we try to reserve a job, theres not a
+    # good way to test that it does not return when the watchlist doesn't
+    # include this job, untill threading/async is better anyway
+    # out of orderness is a good test tho... :)
+
+    job = conn.reserve()
+    assert job['jid'] == jid, 'got wrong job from tube bar'
+    conn.release(jid)
+
+    conn.watchlist = ['default']
+    job = conn.reserve()
+    assert job['jid'] == dummy_id, 'got wrong job from default'
+    conn.delete(dummy_id)
+
+    conn.watchlist = testlist
+    conn.reserve()
+    conn.delete(jid)
+
