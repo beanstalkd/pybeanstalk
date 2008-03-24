@@ -1,12 +1,15 @@
-0.9.0a -- Mar. 20, 2008:
+0.9.0 -- Mar. 20, 2008:
  * new tests for everything
  * added connection level support for tubes
  * changed the ServerConn class to be less verbose, using __getattr__
  * Implemented the 0.9 protocol
  * The handler function for interactions is now a generator and the whole of
    it is implemented in a continuation passing style
- * Changed protohandler to not be based on an unneeded object
+ * Moved protohandler from a class to functions.
+
+0.7.0 -- Mar. 23, 2008
  * Fixed a typo pointed out by Keith Rarick
+ * fixed some text formatting issues.
 Feb. 21, 2008:
  * This is the first alpha release of this client software, changelog will
    be implemented from here.
