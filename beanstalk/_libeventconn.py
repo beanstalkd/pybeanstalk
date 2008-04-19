@@ -1,3 +1,6 @@
+import socket, sys
+import protohandler
+
 class LibeventConn(object):
     '''LibeventConn -- Like other connection types in pybeanstalk, is
     intended to only handle the benstalk related connections. This connection
