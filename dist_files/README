@@ -11,6 +11,7 @@ nothing more than an interface to the protocol over a socktet, or e.g.
 thread-wrangling
 
 To install, just run python setup.py install from this directory.
+  * NOTE to python developers: this has been tested to play nice with virtualenv
 
 
 Copyright notice:
