@@ -1,3 +1,19 @@
+Apr. 19, 2008:
+ * Updates for 0.10/0.11 versions of beanstalkd.
+   * protocol changes are incorporated
+   * testing is expanded to cover this
+ * Cleanup:
+   * protohandler.py changed handler from a pure generator to a class. It improves
+     performance slightly, and more importantly makes things cleaner to read.
+   * removed some superfluous code from __init__.py
+   * better comments
+ * New stuff:
+   * examples directory. This will, over time, accrue example uses/simple cases
+     of using pybeanstalk
+   * libevent support. Added a new connection type that works with libevent and
+     pyevent. This connection type will only import on systems with pyevet
+     installed.
+
 0.9.0 -- Mar. 20, 2008:
  * new tests for everything
  * added connection level support for tubes
