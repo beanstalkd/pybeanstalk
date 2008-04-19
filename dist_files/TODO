@@ -2,7 +2,6 @@
 list, please see: http://code.google.com/p/pybeanstalk/wiki/TODO
 
 The big things:
- * Event based (libevent) client
  * Twisted Client
  * Simple mainloop layer
  * docs
