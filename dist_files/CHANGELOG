@@ -1,3 +1,10 @@
+0.11.0 -- Apr. 19, 2008:
+ * changes below incorporated
+ * skipping 0.10.0 since 0.11.0 came out right away, and the versions are
+   compatable/interchangable, with the exeption of a couple of the stats. I'd
+   suggest that you dont rely on those stats if you may use code on both :) see
+   beanstalk's proto.txt for more info on that.
+
 Apr. 19, 2008:
  * Updates for 0.10/0.11 versions of beanstalkd.
    * protocol changes are incorporated
