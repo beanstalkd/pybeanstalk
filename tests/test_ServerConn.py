@@ -70,6 +70,7 @@ def _test_put_reserve_delete_a_job(payload, pri):
     assert jstats['state'] == 'reserved'
 
     # delete it
+    print 'about to delete'
     conn.delete(res['jid'])
     assert conn.stats()['data']['current-jobs-ready'] == 0, "job was not deleted"
     nose.tools.assert_raises(errors.NotFound, conn.stats_job, res['jid'])
@@ -204,9 +205,11 @@ def test_tube_operations():
     conn.watchlist = ['default']
     job = conn.reserve()
     assert job['jid'] == dummy_id, 'got wrong job from default'
+    print 'about to delete'
     conn.delete(dummy_id)
 
     conn.watchlist = testlist
     conn.reserve()
+    print 'about to delete again'
     conn.delete(jid)
 

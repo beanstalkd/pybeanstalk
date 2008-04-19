@@ -15,6 +15,7 @@ class ExpectedCrlf(ProtoError): pass
 class JobTooBig(ProtoError): pass
 class NotFound(ProtoError): pass
 class NotIgnored(ProtoError): pass
+class DeadlineSoon(ProtoError):pass
 
 class UnexpectedResponse(ProtoError): pass
 

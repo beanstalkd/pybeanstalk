@@ -17,7 +17,8 @@ def test_checkError():
                  (errors.ExpectedCrlf, 'EXPECTED_CRLF'),
                  (errors.JobTooBig, 'JOB_TOO_BIG'),
                  (errors.NotFound, 'NOT_FOUND'),
-                 (errors.NotIgnored, 'NOT_IGNORED')]
+                 (errors.NotIgnored, 'NOT_IGNORED'),
+                 (errors.DeadlineSoon, 'DEADLINE_SOON')]
 
     for error, rstring in errorlist:
         yield t_func, rstring, error

@@ -1,7 +1,10 @@
-import socket, select
+import socket, select, sys
 import protohandler
 
+MIN_TIME = .0000001
 _debug = 1
+
+class ConnectionError(Exception): pass
 
 class ServerConn(object):
     '''ServerConn is a simple, single thread single connection serialized
@@ -19,7 +22,7 @@ class ServerConn(object):
     def __init__(self, server, port, job = False):
         self.server = server
         self.port = port
-        self.job = job or (lambda **x: x)
+        self.job = job
         self.poller = select.poll()
         self.__makeConn()
 
@@ -30,6 +33,7 @@ class ServerConn(object):
         self._socket = socket.socket()
         self._socket.connect((self.server, self.port))
         self.poller.register(self._socket, select.POLLIN)
+        protohandler.MAX_JOB_SIZE = self.stats()['data']['max-job-size']
 
     def __writeline(self, line):
         try:
@@ -39,15 +43,23 @@ class ServerConn(object):
 
     def _get_response(self, handler):
         data = ''
+        pcount = 0
         while True:
-            if not self.poller.poll(2): continue
-
-            recv = self._socket.recv(protohandler.data_remaining(handler))
+            if not self.poller.poll(1):
+                pcount += 1
+                if pcount >= 20:
+                    raise Exception('poller timeout %s times in a row' % (pcount,))
+                else: continue
+            pcount = 0
+            recv = self._socket.recv(handler.remaining)
             if not recv:
                 self._socket.close()
                 raise errors.ProtoError("Remote host closed conn")
-            res = handler.send(recv)
+            res = handler(recv)
             if res: break
+
+        if self.job and 'jid' in job:
+            res = self.job(res)
         return res
 
 
@@ -122,3 +134,9 @@ class ThreadedConnPool(object):
         self.lock.release()
         self.useme.release()
 
+try:
+    from _libeventconn import LibeventConn
+except ImportError:
+    # most likely no libevent or pyevent. Thats fine, dont cause problems
+    # for such cases
+    pass

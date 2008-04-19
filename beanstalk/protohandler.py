@@ -26,46 +26,51 @@ from functools import wraps
 from errors import checkError
 import errors
 
+# default value on server
+MAX_JOB_SIZE = (2**16) - 1
+
 class ExpectedData(Exception): pass
 
 def intit(val):
     try: return int(val)
     except: return val
 
-_namematch = re.compile(r'^[a-zA-Z0-9+\(\);.$][a-zA-Z0-9+\(\);.$-]{0,199}$')
-def check_name(name):
-    if not _namematch.match(name):
-        raise errors.BadFormat('Illegal name')
 
-def makeResponseHandler(ok, full=None, ok_args=[], full_args=[], \
+class Handler(object):
+    def __init__(self, ok, full=None, ok_args=[], full_args=[], \
         has_data=False, parse=(lambda x: x)):
-    lookup = dict()
 
-    lookup[ok] = (ok_args,'ok')
-    if full: lookup[full] = (full_args, 'buried')
+        self.lookup = {ok:(ok_args,'ok')}
+        if full:
+            self.lookup[full] = (full_args, 'buried')
 
-    def handler():
+        self.has_data = has_data
+        self.parse = parse
+        self.remaining = 10
+
+        h = self.handler()
+        h.next()
+        self.__h = h.send
+
+    def __call__(self, val):
+        return self.__h(val)
+
+    def handler(self):
         eol = '\r\n'
 
-        handler.remaining = 1
         response = ''
-        data = ''
+        sep = ''
 
-        trv = None
-        while not response.endswith(eol):
-            try:
-                ndata = (yield trv)
-                if ndata: response += ndata
-                trv = None
-            except ExpectedData:
-                trv = handler.remaining
-        response = response.rstrip(eol)
+        while not sep:
+            response += (yield None)
+            response, sep, data = response.partition(eol)
+
         checkError(response)
 
         response = response.split(' ')
         word = response.pop(0)
 
-        args, state = lookup.get(word, ([],''))
+        args, state = self.lookup.get(word, ([],''))
 
         # sanity checks
         if not state:
@@ -81,32 +86,24 @@ def makeResponseHandler(ok, full=None, ok_args=[], full_args=[], \
         reply = dict(itertools.izip(args, itertools.imap(intit, response)))
         reply['state'] = state
 
-        if not has_data:
-            handler.remaining = 0
+        if not self.has_data:
+            self.remaining = 0
             yield reply
             return
 
-        handler.remaining = reply['bytes'] + 2
+        self.remaining = (reply['bytes'] + 2) - len(data)
 
-        trv = None
-        while handler.remaining > 0:
-            try:
-                newdata = (yield trv)
-                handler.remaining -= len(newdata)
-                data += newdata
-                trv = None
-            except ExpectedData:
-                trv = handler.remaining
+        while self.remaining > 0:
+            newdata = (yield None)
+            self.remaining -= len(newdata)
+            data += newdata
 
         if not data.endswith(eol) or not (len(data) == reply['bytes']+2):
             raise errors.ExpectedCrlf('Data not properly sent from server')
 
-        reply['data'] = parse(data.rstrip(eol))
+        reply['data'] = self.parse(data.rstrip(eol))
         yield reply
         return
-    ret = handler()
-    ret.next()
-    return ret
 
 # this decorator gets rid of a lot of cruft around protocol commands,
 # making the protocol easier to read. The interaction decorator takes
@@ -117,13 +114,16 @@ def interaction(*args, **kw):
         @wraps(func)
         def newfunc(*fargs, **fkw):
             line = func(*fargs, **fkw)
-            handler = makeResponseHandler(*args, **kw)
+            handler = Handler(*args, **kw)
             return (line, handler)
         return newfunc
     return deco
 
-def data_remaining(handler):
-    return handler.throw(ExpectedData)
+_namematch = re.compile(r'^[a-zA-Z0-9+\(\);.$][a-zA-Z0-9+\(\);.$-]{0,199}$')
+def check_name(name):
+    '''used to check the validity of a tube name'''
+    if not _namematch.match(name):
+        raise errors.BadFormat('Illegal name')
 
 @interaction(ok='INSERTED', ok_args=['jid'], full='BURIED', full_args=['jid'])
 def process_put(data, pri=1, delay=0, ttr=60):
@@ -140,9 +140,9 @@ def process_put(data, pri=1, delay=0, ttr=60):
     raises a protocol error when the size is too big.
     """
     dlen = len(data)
-    if dlen >= 2**16:
+    if dlen >= MAX_JOB_SIZE:
         raise errors.JobTooBig('Job size is %s (max allowed is %s' %\
-            (dlen, 2**16))
+            (dlen, MAX_JOB_SIZE))
     putline = 'put %(pri)s %(delay)s %(ttr)s %(dlen)s\r\n%(data)s\r\n'
     return putline % locals()
 
@@ -166,8 +166,10 @@ def process_reserve():
             reserve
 
         return:
-            RESERVED <id> <pri> <bytes>
+            RESERVED <id> <bytes>
             <data>
+
+            DEADLINE_SOON
     '''
     x = 'reserve\r\n'
     return x
@@ -243,20 +245,54 @@ def process_peek(jid = 0):
     """
     peek
         send:
-            peek [<id>]
+            peek <id>
 
         return:
             NOT_FOUND
-            FOUND <id> <pri> <bytes>
+            FOUND <id> <bytes>
             <data>
 
-    NOTE: as of beanstalk 0.5, peek without and id param will return the
-          first buried job, this is extremely likely to change
     """
     if jid:
         return 'peek %s\r\n' % (jid,)
-    else:
-        return 'peek\r\n'
+
+@interaction(ok='FOUND', ok_args=['jid','bytes'], has_data = True)
+def process_peek_ready():
+    '''
+    peek-ready
+        send:
+            peek-ready
+        return:
+            NOT_FOUND
+            FOUND
+            FOUND <id> <bytes>
+    '''
+    return 'peek-ready\r\n'
+
+@interaction(ok='FOUND', ok_args=['jid','bytes'], has_data = True)
+def process_peek_delayed():
+    '''
+    peek-delayed
+        send:
+            peek-delayed
+        return:
+            NOT_FOUND
+            FOUND
+            FOUND <id> <bytes>
+    '''
+    return 'peek-delayed\r\n'
+
+@interaction(ok='FOUND', ok_args=['jid','bytes'], has_data = True)
+def process_peek_buried():
+    '''
+    peek-buried
+        send:
+            peek-buried
+        return:
+            NOT_FOUND
+            FOUND <id> <bytes>
+    '''
+    return 'peek-buried\r\n'
 
 @interaction(ok='KICKED', ok_args = ['count'])
 def process_kick(bound=10):

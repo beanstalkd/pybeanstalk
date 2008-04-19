@@ -13,7 +13,7 @@ fancy wrappers, or e.g. thread-wrangling
 '''
 
 setup(name='pybeanstalk',
-      version='0.7.0b',
+      version='0.10.0',
       description='A python client library for beanstalkd.',
       long_description = description_long,
       author='Erich Heine',

@@ -76,8 +76,24 @@ prototest_info = [
         ]
     ],
     [
-        ('process_peek', ()),
-        'peek\r\n',
+        ('process_peek_ready', ()),
+        'peek-ready\r\n',
+        [
+            ("FOUND 9 10\r\nabcdefghij\r\n",{'state':'ok', 'jid':9, 'bytes':10,
+                'data':'abcdefghij'})
+        ]
+    ],
+    [
+        ('process_peek_delayed', ()),
+        'peek-delayed\r\n',
+        [
+            ("FOUND 9 10\r\nabcdefghij\r\n",{'state':'ok', 'jid':9, 'bytes':10,
+                'data':'abcdefghij'})
+        ]
+    ],
+    [
+        ('process_peek_buried', ()),
+        'peek-buried\r\n',
         [
             ("FOUND 9 10\r\nabcdefghij\r\n",{'state':'ok', 'jid':9, 'bytes':10,
                 'data':'abcdefghij'})
@@ -146,13 +162,14 @@ prototest_info = [
 
 
 def check_line(l1, l2):
-    assert l1 == l2
+    assert l1 == l2, '%s %s' % (l1, l2)
 
-def check_handler(handlerfunc, response, cv):
+def check_handler(handler, response, cv):
     l = 0
     while True:
-        l = protohandler.data_remaining(handlerfunc)
-        y = handlerfunc.send(response[:l])
+        r = len(response)
+        l = handler.remaining if handler.remaining > r else r
+        y = handler(response[:l])
         response = response[l:]
         if y:
             assert y == cv
@@ -172,4 +189,10 @@ def test_interactions():
 def test_put_extra():
     #check that the put raises the right error on big jobs...
     tools.assert_raises(errors.JobTooBig, protohandler.process_put,'a' * (2**16),0,0,0)
+    #check that it handles different job sizes correctly (not just default)
+    oldmax = protohandler.MAX_JOB_SIZE
+    protohandler.MAX_JOB_SIZE = 10
+    tools.assert_raises(errors.JobTooBig, protohandler.process_put,'a' * 11,0,0,0)
+    protohandler.MAX_JOB_SIZE = oldmax
+
 
