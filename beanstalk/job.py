@@ -1,14 +1,14 @@
 from functools import wraps
 import yaml
-from errors import FailureError, JobError
+import errors
 
 DEFAULT_CONN = None
 
 def honorimmutable(func):
     @wraps(func)
     def deco(*args, **kw):
-        if args[0]._imutable:
-            raise JobError("Cannot do that to a job you don't own")
+        if args[0].imutable:
+            raise errors.JobError("Cannot do that to a job you don't own")
         return func(*args, **kw)
     return deco
 
@@ -49,13 +49,12 @@ class Job(object):
         else:
             self.data = ''
 
-        self._imutable = bool(kw.get('imutable'), False)
+        self.imutable = bool(kw.get('imutable', False))
         self._from_queue = bool(kw.get('from_queue', False))
         self.tube = kw.get('tube', 'default')
 
     def __del__(self):
-        self.Delete()
-        super(Job, self).__del__()
+        self.Finish()
 
     def __str__(self):
         return self._serialize()
@@ -73,7 +72,7 @@ class Job(object):
         if self._from_queue:
             self.Delay(self.delay)
             return
-        oldtube = self.conn.current_tube
+        oldtube = self.conn.tube
         if oldtube != self.tube:
             self.conn.use(self.tube)
         self.conn.put(self._serialize(), self.priority, self.delay)

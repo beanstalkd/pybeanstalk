@@ -4,8 +4,8 @@ import time
 import select
 
 # pybeanstalk imports
-import serverconn
-import job
+from beanstalk import serverconn
+from beanstalk import job
 
 def producer_main(connection):
     i = 0
@@ -13,7 +13,7 @@ def producer_main(connection):
         data = 'This is data to be consumed (%s)!' % (i,)
         print data
         data = job.Job(data=data, conn=connection)
-        data.put()
+        data.Queue()
         time.sleep(1)
         i += 1;
 
@@ -21,7 +21,7 @@ def consumer_main(connection):
     while True:
         j = connection.reserve()
         print 'got job! job is: %s' % j.data
-        j.delete()
+        j.Finish()
 
 def main():
     try:

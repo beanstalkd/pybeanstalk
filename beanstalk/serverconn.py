@@ -2,7 +2,7 @@ import socket, select, sys
 import protohandler
 
 MIN_TIME = .0000001
-_debug = 1
+_debug = False
 
 class ConnectionError(Exception): pass
 
@@ -47,7 +47,7 @@ class ServerConn(object):
         while True:
             if not self.poller.poll(1):
                 pcount += 1
-                if pcount >= 20:
+                if pcount >= 20 and _debug:
                     raise Exception('poller timeout %s times in a row' % (pcount,))
                 else: continue
             pcount = 0
@@ -58,8 +58,8 @@ class ServerConn(object):
             res = handler(recv)
             if res: break
 
-        if self.job and 'jid' in job:
-            res = self.job(res)
+        if self.job and 'jid' in res:
+            res = self.job(conn=self,**res)
         return res
 
 
