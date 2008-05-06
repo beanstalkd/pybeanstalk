@@ -58,8 +58,8 @@ class ServerConn(object):
             res = handler(recv)
             if res: break
 
-        if self.job and 'jid' in job:
-            res = self.job(res)
+        if self.job and 'jid' in res:
+            res = self.job(conn=self,**res)
         return res
 
 
