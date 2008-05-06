@@ -1,3 +1,10 @@
+0.11.1 -- May 6, 2008:
+ * made the poller timeout code into an debugging option (severconn._debug=True)
+ * moved example.py from the main beanstalk package to the examples/ directory
+ * renamed example.py to simple_clients.py
+ * removed producer.py since that functionality was handled in simple_clients
+ * fixed some bugs in the Job class, it should be usable now.
+
 0.11.0 -- Apr. 19, 2008:
  * changes below incorporated
  * skipping 0.10.0 since 0.11.0 came out right away, and the versions are
