@@ -29,6 +29,7 @@ class LibeventConn(object):
     import event
     WAIT = 0
     IN_INTERACTION = 1
+    MIN_TIME = .0000001
 
     def __init__(self, server, port, job = None):
         self.server = server
@@ -75,7 +76,7 @@ class LibeventConn(object):
                 # dont do too much damage. Also in the case of e.g. stakless,
                 # this wont interfere with the libevent loop as much
                 self.phase = self.WAIT
-                self.event.timeout(MIN_TIME, self.__callback, resp, idata)
+                self.event.timeout(self.MIN_TIME, self.__callback, resp, idata)
                 return None
             else:
                 # more to read

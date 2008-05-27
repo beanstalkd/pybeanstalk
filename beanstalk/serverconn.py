@@ -1,7 +1,6 @@
 import socket, select
 import protohandler
 
-MIN_TIME = .0000001
 _debug = False
 
 class ConnectionError(Exception): pass
