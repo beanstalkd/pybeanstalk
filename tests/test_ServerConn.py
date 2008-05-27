@@ -8,11 +8,10 @@ There is a strong possibility of side effects from failing tests breaking
 others.  Probably best to setup a new beanstalkd at each test.
 """
 
-import os, sys
+import os
 import signal
 import socket
 import time
-import pprint
 
 from nose.tools import with_setup
 import nose

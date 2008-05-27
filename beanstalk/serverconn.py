@@ -1,4 +1,4 @@
-import socket, select, sys
+import socket, select
 import protohandler
 
 MIN_TIME = .0000001
@@ -54,7 +54,7 @@ class ServerConn(object):
             recv = self._socket.recv(handler.remaining)
             if not recv:
                 self._socket.close()
-                raise errors.ProtoError("Remote host closed conn")
+                raise protohandler.errors.ProtoError("Remote host closed conn")
             res = handler(recv)
             if res: break
 
@@ -112,15 +112,19 @@ class ThreadedConnPool(object):
     to the thread that calls get.  In fact this could probably be simplified
     even more by subclassing Semaphore.
     '''
+
+    import threading
+
     def __init__(self, nconns, server, port, job = False):
         self.__conns = list()
-        self.__lock = threading.Lock()
+        self.__lock = self.threading.Lock()
+        # threaded isn't defined here
         if threaded: conntype = ThreadedConn
         else: conntype = ServerConn
         for a in range(nconns):
             self.conns.append(conntype(server, port, job=job, pool=self))
 
-        self.useme = threading.Semaphore(nconns)
+        self.useme = self.threading.Semaphore(nconns)
 
     def get(self):
         self.useme.aquire()

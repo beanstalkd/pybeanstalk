@@ -1,7 +1,6 @@
 # stdlib imports
 import sys
 import time
-import select
 
 # pybeanstalk imports
 from beanstalk import serverconn

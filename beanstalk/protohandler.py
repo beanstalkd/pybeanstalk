@@ -21,7 +21,7 @@ specifies how many bytes are still expected in the data portion of a reply.
 """
 
 import yaml
-import re, itertools, functools
+import re, itertools
 from functools import wraps
 from errors import checkError
 import errors
