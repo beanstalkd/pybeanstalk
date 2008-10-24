@@ -74,7 +74,7 @@ class Beanstalk(basic.LineReceiver):
                 *getattr(protohandler, 'process_%s' % attr)(*args, **kw))
         return caller
 
-    def __cmd(self, command, full_command, handler)
+    def __cmd(self, command, full_command, handler):
         # Note here: the protohandler already inserts the \r\n, so
         # it would be an error to do self.sendline()
         self.transport.write(full_command)
@@ -106,7 +106,7 @@ class Beanstalk(basic.LineReceiver):
     def rawDataReceived(self, data):
         pending = self._current.popleft()
         if len(data) >= pending.handler.remaining:
-            rem = data[peding.handler.remaining:]
+            rem = data[pending.handler.remaining:]
             data = data[:pending.handler.remaining]
         else:
             rem = None
