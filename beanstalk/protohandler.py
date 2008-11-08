@@ -21,7 +21,8 @@ specifies how many bytes are still expected in the data portion of a reply.
 """
 
 import yaml
-import re, itertools
+import re
+from itertools import izip, imap
 from functools import wraps
 from errors import checkError
 import errors
@@ -30,6 +31,21 @@ import errors
 MAX_JOB_SIZE = (2**16) - 1
 
 class ExpectedData(Exception): pass
+class CommandState(object):
+    def __init__(self, word, args =None , hasData = False,
+            parsefunc = (lambda x: x)):
+        self.word = word
+        self.args = args if args else []
+        self.hasData = hasData
+        self.parsefunc = parsefunc
+
+    def __str__(self):
+        '''will fail if attr name hasnt been set by subclass or program'''
+        return self.__classs__.__name__.lower()
+
+class OK(CommandState): pass
+class TimeOut(CommandState): pass
+class Buried(CommandState): pass
 
 def intit(val):
     try: return int(val)
@@ -37,14 +53,9 @@ def intit(val):
 
 
 class Handler(object):
-    def __init__(self, ok, full=None, ok_args=[], full_args=[], \
-        has_data=False, parse=(lambda x: x)):
+    def __init__(self, *states):
 
-        self.lookup = {ok:(ok_args,'ok')}
-        if full:
-            self.lookup[full] = (full_args, 'buried')
-
-        self.has_data = has_data
+        self.lookup =  dict((s.word, s) for s in states)
         self.parse = parse
         self.remaining = 10
 
@@ -70,12 +81,12 @@ class Handler(object):
         response = response.split(' ')
         word = response.pop(0)
 
-        args, state = self.lookup.get(word, ([],''))
+        state = self.lookup.get(word, None)
 
         # sanity checks
         if not state:
             errstr = "Repsonse was: %s %s" % (word, ' '.join(response))
-        elif len(response) != len(args):
+        elif len(response) != len(state.args):
             errstr = "Repsonse %s had wrong # args, got %s (expected %s)"
             errstr %= (word, response, args)
         else: # all good
@@ -83,10 +94,10 @@ class Handler(object):
 
         if errstr: raise errors.UnexpectedResponse(errstr)
 
-        reply = dict(itertools.izip(args, itertools.imap(intit, response)))
-        reply['state'] = state
+        reply = dict(izip(state.args, imap(intit, response)))
+        reply['state'] = str(state)
 
-        if not self.has_data:
+        if not state.has_data:
             self.remaining = 0
             yield reply
             return
@@ -101,7 +112,7 @@ class Handler(object):
         if not data.endswith(eol) or not (len(data) == reply['bytes']+2):
             raise errors.ExpectedCrlf('Data not properly sent from server')
 
-        reply['data'] = self.parse(data.rstrip(eol))
+        reply['data'] = state.parsefunc(data.rstrip(eol))
         yield reply
         return
 
@@ -109,12 +120,12 @@ class Handler(object):
 # making the protocol easier to read. The interaction decorator takes
 # the args that describe the response, the following function only needs
 # to create a command line to the server
-def interaction(*args, **kw):
+def interaction(*states):
     def deco(func):
         @wraps(func)
-        def newfunc(*fargs, **fkw):
-            line = func(*fargs, **fkw)
-            handler = Handler(*args, **kw)
+        def newfunc(*args, **kw):
+            line = func(*args, **kw)
+            handler = Handler(*states)
             return (line, handler)
         return newfunc
     return deco
@@ -125,7 +136,7 @@ def check_name(name):
     if not _namematch.match(name):
         raise errors.BadFormat('Illegal name')
 
-@interaction(ok='INSERTED', ok_args=['jid'], full='BURIED', full_args=['jid'])
+@interaction(OK('INSERTED',['jid']), Buried('BURIED', ['jid']))
 def process_put(data, pri=1, delay=0, ttr=60):
     """
     put
@@ -146,7 +157,7 @@ def process_put(data, pri=1, delay=0, ttr=60):
     putline = 'put %(pri)s %(delay)s %(ttr)s %(dlen)s\r\n%(data)s\r\n'
     return putline % locals()
 
-@interaction('USING', ok_args=['tube'])
+@interaction(OK('USING', ['tube']))
 def process_use(tube):
     '''
     use
@@ -158,7 +169,7 @@ def process_use(tube):
     check_name(tube)
     return 'use %s\r\n' % (tube,)
 
-@interaction('RESERVED', ok_args=['jid','bytes'], has_data=True)
+@interaction(OK('RESERVED', ['jid','bytes'], True))
 def process_reserve():
     '''
      reserve
@@ -174,7 +185,26 @@ def process_reserve():
     x = 'reserve\r\n'
     return x
 
-@interaction(ok='DELETED')
+@interaction(OK('RESERVED', ['jid','bytes'], True), TimedOut('TIMED_OUT'))
+def process_reserve(timeout=0):
+    '''
+     reserve
+        send:
+            reserve-with-timeout <timeout>
+
+        return:
+            RESERVED <id> <bytes>
+            <data>
+
+            TIME_OUT
+
+            DEADLINE_SOON
+    '''
+    if int(timeout) < 0:
+        raise AttributeError('timeoute must be greater than 0')
+    return 'reserve-with-timeout %s' % (timeout,)
+
+@interaction(OK('DELETED'))
 def process_delete(jid):
     """
     delete
@@ -187,7 +217,7 @@ def process_delete(jid):
     """
     return 'delete %s\r\n' % (jid,)
 
-@interaction(ok='RELEASED', full='BURIED')
+@interaction(OK('RELEASED'), Buried('BURIED'))
 def process_release(jid, pri=1, delay=0):
     """
     release
@@ -201,7 +231,7 @@ def process_release(jid, pri=1, delay=0):
     """
     return 'release %(jid)s %(pri)s %(delay)s\r\n' % locals()
 
-@interaction(ok='BURIED')
+@interaction(OK('BURIED'))
 def process_bury(jid, pri=1):
     """
     bury
@@ -214,7 +244,7 @@ def process_bury(jid, pri=1):
     """
     return 'bury %(jid)s %(pri)s\r\n' % locals()
 
-@interaction(ok='WATCHING', ok_args=['count'])
+@interaction(OK('WATCHING', ['count']))
 def process_watch(tube):
     '''
     watch
@@ -226,7 +256,7 @@ def process_watch(tube):
     check_name(tube)
     return 'watch %s\r\n' % (tube,)
 
-@interaction(ok='WATCHING', ok_args=['count'])
+@interaction(OK('WATCHING', ['count']))
 def process_ignore(tube):
     '''
     ignore
@@ -240,7 +270,7 @@ def process_ignore(tube):
     check_name(tube)
     return 'ignore %s\r\n' % (tube,)
 
-@interaction(ok='FOUND', ok_args=['jid','bytes'], has_data = True)
+@interaction(OK('FOUND', ['jid','bytes'], True))
 def process_peek(jid = 0):
     """
     peek
@@ -256,7 +286,7 @@ def process_peek(jid = 0):
     if jid:
         return 'peek %s\r\n' % (jid,)
 
-@interaction(ok='FOUND', ok_args=['jid','bytes'], has_data = True)
+@interaction(OK('FOUND', ['jid','bytes'], True))
 def process_peek_ready():
     '''
     peek-ready
@@ -264,12 +294,11 @@ def process_peek_ready():
             peek-ready
         return:
             NOT_FOUND
-            FOUND
             FOUND <id> <bytes>
     '''
     return 'peek-ready\r\n'
 
-@interaction(ok='FOUND', ok_args=['jid','bytes'], has_data = True)
+@interaction(OK('FOUND', ['jid','bytes'], True))
 def process_peek_delayed():
     '''
     peek-delayed
@@ -277,12 +306,11 @@ def process_peek_delayed():
             peek-delayed
         return:
             NOT_FOUND
-            FOUND
             FOUND <id> <bytes>
     '''
     return 'peek-delayed\r\n'
 
-@interaction(ok='FOUND', ok_args=['jid','bytes'], has_data = True)
+@interaction(OK('FOUND', ['jid','bytes'], True))
 def process_peek_buried():
     '''
     peek-buried
@@ -294,7 +322,7 @@ def process_peek_buried():
     '''
     return 'peek-buried\r\n'
 
-@interaction(ok='KICKED', ok_args = ['count'])
+@interaction(OK('KICKED', ['count']))
 def process_kick(bound=10):
     """
     kick
@@ -306,7 +334,7 @@ def process_kick(bound=10):
     """
     return 'kick %s\r\n' % (bound,)
 
-@interaction(ok='OK', ok_args=['bytes'], has_data=True, parse=yaml.load)
+@interaction(OK('OK', ['bytes'], True, yaml.load))
 def process_stats():
     """
     stats
@@ -318,7 +346,7 @@ def process_stats():
     """
     return 'stats\r\n'
 
-@interaction(ok='OK', ok_args=['bytes'], has_data=True, parse=yaml.load)
+@interaction(OK('OK', ['bytes'], True, yaml.load))
 def process_stats_job(jid):
     """
     stats
@@ -332,7 +360,7 @@ def process_stats_job(jid):
     """
     return 'stats-job %s\r\n' % (jid,)
 
-@interaction(ok='OK', ok_args=['bytes'], has_data=True, parse=yaml.load)
+@interaction(OK('OK', ['bytes'], True, yaml.load))
 def process_stats_tube(tube):
     """
     stats
@@ -347,7 +375,7 @@ def process_stats_tube(tube):
     check_name(tube)
     return 'stats-tube %s\r\n' % (tube,)
 
-@interaction(ok='OK', ok_args=['bytes'], has_data=True, parse=yaml.load)
+@interaction(OK('OK', ['bytes'], True, yaml.load))
 def process_list_tubes():
     '''
     list-tubes
@@ -359,7 +387,7 @@ def process_list_tubes():
     '''
     return 'list-tubes\r\n'
 
-@interaction('USING', ok_args = ['tube'])
+@interaction(OK('USING', ['tube']))
 def process_list_tube_used():
     '''
     list-tube-used
@@ -370,7 +398,7 @@ def process_list_tube_used():
     '''
     return 'list-tube-used\r\n'
 
-@interaction(ok='OK', ok_args=['bytes'], has_data=True, parse=yaml.load)
+@interaction(OK('OK', ['bytes'], True, yaml.load))
 def process_list_tubes_watched():
     '''
     list-tubes-watched
