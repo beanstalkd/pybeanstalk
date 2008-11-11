@@ -18,6 +18,11 @@ conatining the response. The handler is a generator that when fed data will
 yeild None when more input is expected, and the results dict when all the data
 is provided. Further, it has an attribute, remaining, which is an integer that
 specifies how many bytes are still expected in the data portion of a reply.
+
+This may seem a bit round-about, but it allows for many different styles* of
+programming to use the same bit of code for implementing the protocol.
+
+* e.g. the simple syncronous connection and the twisted client both use this :)
 """
 
 import yaml
@@ -31,21 +36,39 @@ import errors
 MAX_JOB_SIZE = (2**16) - 1
 
 class ExpectedData(Exception): pass
-class CommandState(object):
-    def __init__(self, word, args =None , hasData = False,
-            parsefunc = (lambda x: x)):
+
+class Response(object):
+    '''This is a simple object for describing the expected response to a
+    command. It is intended to be subclassed, and the subclasses to be named
+    in such a way as to describe the response.  For example, I've used
+    OK for the expected normal response, and Buried for the cases where
+    a command can result in a burried job.
+
+    Arguments/attributes:
+        word: the first word sent back from the server (eg OK)
+        args: the server replies with space separated positional arguments,
+              this describes the names of those argumens
+        hasData: boolean stating whether or not to expect a data stream after
+                 the response line
+        parsefunc: a function, used to transform the data. This will be called
+                   just prior to returning the dict, and its result will
+                   be under the key 'data'
+    '''
+    parsefunc = (lambda x: x)
+    def __init__(self, word, args =None , hasData = False, parsefunc = None):
         self.word = word
         self.args = args if args else []
         self.hasData = hasData
-        self.parsefunc = parsefunc
+        if parsefunc:
+            self.parsefunc = parsefunc
 
     def __str__(self):
         '''will fail if attr name hasnt been set by subclass or program'''
         return self.__classs__.__name__.lower()
 
-class OK(CommandState): pass
-class TimeOut(CommandState): pass
-class Buried(CommandState): pass
+class OK(Response): pass
+class TimeOut(Response): pass
+class Buried(Response): pass
 
 def intit(val):
     try: return int(val)
@@ -53,9 +76,14 @@ def intit(val):
 
 
 class Handler(object):
-    def __init__(self, *states):
+    '''
+    Handler: generic respsonse consumer for beanstalk.
 
-        self.lookup =  dict((s.word, s) for s in states)
+    Each handler object has a __call__ method, allowing it to be fed data.
+    '''
+    def __init__(self, *responses):
+
+        self.lookup =  dict((r.word, r) for r in responses)
         self.parse = parse
         self.remaining = 10
 
@@ -66,12 +94,20 @@ class Handler(object):
     def __call__(self, val):
         return self.__h(val)
 
+    # Note: this takes advanage of 2.5+ style generators. The syntax:
+    # x = (yeild value)
+    # yeilds the value, and expects x.send(foo) to be called. Foo will be
+    # assigned to x.
     def handler(self):
         eol = '\r\n'
 
         response = ''
         sep = ''
 
+        # TODO: figure out the max possible response line, and set the default
+        # remaining to that amount. check for sep or that amount of data...
+        # its a bit of a sanity check, as this could be attacked.
+        #
         while not sep:
             response += (yield None)
             response, sep, data = response.partition(eol)
@@ -81,12 +117,12 @@ class Handler(object):
         response = response.split(' ')
         word = response.pop(0)
 
-        state = self.lookup.get(word, None)
+        resp = self.lookup.get(word, None)
 
         # sanity checks
-        if not state:
+        if not resp:
             errstr = "Repsonse was: %s %s" % (word, ' '.join(response))
-        elif len(response) != len(state.args):
+        elif len(response) != len(resp.args):
             errstr = "Repsonse %s had wrong # args, got %s (expected %s)"
             errstr %= (word, response, args)
         else: # all good
@@ -94,10 +130,10 @@ class Handler(object):
 
         if errstr: raise errors.UnexpectedResponse(errstr)
 
-        reply = dict(izip(state.args, imap(intit, response)))
-        reply['state'] = str(state)
+        reply = dict(izip(resp.args, imap(intit, response)))
+        reply['state'] = str(resp)
 
-        if not state.has_data:
+        if not resp.has_data:
             self.remaining = 0
             yield reply
             return
@@ -112,20 +148,31 @@ class Handler(object):
         if not data.endswith(eol) or not (len(data) == reply['bytes']+2):
             raise errors.ExpectedCrlf('Data not properly sent from server')
 
-        reply['data'] = state.parsefunc(data.rstrip(eol))
+        reply['data'] = resp.parsefunc(data.rstrip(eol))
         yield reply
         return
 
-# this decorator gets rid of a lot of cruft around protocol commands,
-# making the protocol easier to read. The interaction decorator takes
-# the args that describe the response, the following function only needs
-# to create a command line to the server
-def interaction(*states):
+# since the beanstalk protocol uses a simple command-response structure,
+# this decorator makes life easy.  The function it wraps corresponds to a
+# beanstalk command, and returns the appropriate command text.
+# This decorator sets up the structure for handling a response.
+#
+# One thing that may be a bit tricky for those who aren't familiar with python
+# decorators: This changes return value for command function. The functions
+# return a single sting, but after decoration return a tuple of:
+#      (string, handler)
+def interaction(*responses):
+    '''Decorator-facotry for process_* protocol functions. Takes N response objects
+    as arguments, and returns decorator.
+
+    The decorator replaces the wrapped function, and returns the result of
+    the orginal function, as well as a response handler set up to use the
+    expected responses.'''
     def deco(func):
         @wraps(func)
         def newfunc(*args, **kw):
             line = func(*args, **kw)
-            handler = Handler(*states)
+            handler = Handler(*responses)
             return (line, handler)
         return newfunc
     return deco
@@ -231,6 +278,11 @@ def process_release(jid, pri=1, delay=0):
     """
     return 'release %(jid)s %(pri)s %(delay)s\r\n' % locals()
 
+# XXX: semantic question: is this better being an OK since burried is the
+# expected response. Or is it better being a burried since it is the more
+# accurate description, but breaking the rest of semantics of the code?
+#   ^^ this isnt a pressing issue, because for now we still return a
+#      state string pair, which is currently backwards compatible
 @interaction(OK('BURIED'))
 def process_bury(jid, pri=1):
     """
