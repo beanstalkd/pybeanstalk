@@ -20,6 +20,7 @@ def consumer_main(connection):
     while True:
         j = connection.reserve()
         print 'got job! job is: %s' % j.data
+        j.Touch()
         j.Finish()
 
 def main():

@@ -306,6 +306,19 @@ def process_kick(bound=10):
     """
     return 'kick %s\r\n' % (bound,)
 
+@interaction(ok='TOUCHED')
+def process_touch(jid):
+    """
+    touch
+        send:
+            touch <job>
+
+        return:
+            TOUCHED
+            NOT_FOUND
+    """
+    return 'touch %s\r\n' % (jid,)
+
 @interaction(ok='OK', ok_args=['bytes'], has_data=True, parse=yaml.load)
 def process_stats():
     """
