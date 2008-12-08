@@ -41,7 +41,7 @@ class ServerConn(object):
         try:
             self._socket.sendall(line)
         except:
-            raise protohandler.ProtoError
+            raise protohandler.errors.ProtoError
 
     def _get_response(self, handler):
         data = ''
