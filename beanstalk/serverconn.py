@@ -22,7 +22,9 @@ class ServerConn(object):
         self.server = server
         self.port = port
         self.job = job
-        self.poller = select.poll()
+        self.poller = None
+        if hasattr(select, 'poll'):
+            self.poller = select.poll()
         self.__makeConn()
 
     def fileno(self):
@@ -31,7 +33,8 @@ class ServerConn(object):
     def __makeConn(self):
         self._socket = socket.socket()
         self._socket.connect((self.server, self.port))
-        self.poller.register(self._socket, select.POLLIN)
+        if self.poller:
+            self.poller.register(self._socket, select.POLLIN)
         protohandler.MAX_JOB_SIZE = self.stats()['data']['max-job-size']
 
     def __writeline(self, line):
@@ -44,7 +47,7 @@ class ServerConn(object):
         data = ''
         pcount = 0
         while True:
-            if not self.poller.poll(1):
+            if self.poller and not self.poller.poll(1):
                 pcount += 1
                 if pcount >= 20 and _debug:
                     raise Exception('poller timeout %s times in a row' % (pcount,))
