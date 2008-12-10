@@ -1,7 +1,6 @@
 from twisted.protocols import basic
 from twisted.internet import defer, protocol
 from twisted.python import log
-from StringIO import StringIO
 import protohandler
 
 # Stolen from memcached protocol
@@ -96,7 +95,7 @@ class Beanstalk(basic.LineReceiver):
         except Exception, e:
             pending.fail(e)
         else:
-            if res is not None:
+            if res is not None: # we have a result!
                 pending.success(res)
             else: # there is more data, its a job or something...
                 # push the pending command back on the stack
