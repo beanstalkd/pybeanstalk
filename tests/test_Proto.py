@@ -31,6 +31,15 @@ prototest_info = [
         ]
     ],
     [
+        ('process_reserve_with_timeout', (4,)),
+        'reserve\r\n',
+        [
+            ('RESERVED 12 5\r\nabcde\r\n',{'state':'ok', 'bytes': 5, 'jid':12,
+                'data':'abcde'}),
+            ('TIMED_OUT\r\n', {'state':'timeout'})
+        ]
+    ],
+    [
         ('process_delete', (12,)),
         'delete 12\r\n',
         [

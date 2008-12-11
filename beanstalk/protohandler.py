@@ -64,7 +64,7 @@ class Response(object):
 
     def __str__(self):
         '''will fail if attr name hasnt been set by subclass or program'''
-        return self.__classs__.__name__.lower()
+        return self.__class__.__name__.lower()
 
 class OK(Response): pass
 class TimeOut(Response): pass
@@ -233,7 +233,7 @@ def process_reserve():
     return x
 
 @interaction(OK('RESERVED', ['jid','bytes'], True), TimedOut('TIMED_OUT'))
-def process_reserve(timeout=0):
+def process_reserve_with_timeout(timeout=0):
     '''
      reserve
         send:
@@ -246,6 +246,9 @@ def process_reserve(timeout=0):
             TIME_OUT
 
             DEADLINE_SOON
+    Note: After much internal debate I chose to go this route,
+    with hte one-to-one mappaing of function to protocol command. Higher level
+    objects, like the connection objects, can combine these if they see fit.
     '''
     if int(timeout) < 0:
         raise AttributeError('timeoute must be greater than 0')
