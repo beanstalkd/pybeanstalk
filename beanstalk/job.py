@@ -114,6 +114,17 @@ class Job(object):
             return True
 
     @honorimmutable
+    def Touch(self):
+        try:
+            self.conn.touch(self.id)
+        except errors.NotFound:
+            return False
+        except:
+            raise
+        else:
+            return True
+
+    @honorimmutable
     def Bury(self, newpri = 0):
         if newpri:
             self.pri = newpri

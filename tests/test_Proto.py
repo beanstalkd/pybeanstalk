@@ -38,6 +38,13 @@ prototest_info = [
         ]
     ],
     [
+        ('process_touch', (185,)),
+        'touch 185\r\n',
+        [
+            ('TOUCHED\r\n',{'state':'ok'})
+        ]
+    ],
+    [
         ('process_release', (33,22,17)),
         'release 33 22 17\r\n',
         [

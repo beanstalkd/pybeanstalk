@@ -11,6 +11,7 @@ import beanstalk
 
 def executor(bs, jobdata):
     print "Running job %s" % `jobdata`
+    bs.touch(jobdata['jid'])
     bs.delete(jobdata['jid'])
 
 def error_handler(e):
