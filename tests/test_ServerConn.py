@@ -13,7 +13,7 @@ import signal
 import socket
 import time
 
-from nose.tools import with_setup
+from nose.tools import with_setup, assert_raises
 import nose
 
 from beanstalk import serverconn
@@ -212,3 +212,24 @@ def test_tube_operations():
     print 'about to delete again'
     conn.delete(jid)
 
+def test_reserve_timeout_works():
+    assert conn.stats()['data']['current-jobs-ready'] == 0, "The server is not empty "\
+           "of jobs so test behaviour cannot be guaranteed.  Bailing out."
+    # essentially an instant poll. This should just timeout!
+    x = conn.reserve_with_timeout(0)
+    assert x['state'] = 'timeout'
+
+def test_reserve_deadline_soon():
+    assert conn.stats()['data']['current-jobs-ready'] == 0, "The server is not empty "\
+           "of jobs so test behaviour cannot be guaranteed.  Bailing out."
+    # Put a short running job
+    jid = conn.put('foobarbaz job!', ttr=1)['jid']
+    # Reserve it, so we can setup conditions to get a DeadlineSoon error
+    job = conn.reserve()
+    assert jid = job['jid'], "Didn't get test job, something funky is happening."
+    # a bit of padding to make sure that deadline soon is encountered
+    time.sleep(.2)
+    assert_raises(errors.DeadlineSoon, conn.reserve, 'Job should have warned '
+                  'of impending deadline. It did not. This is a problem!')
+    x = conn.delete(jid)
+    assert x['state'] == 'ok', "Didn't delete the job right. This could break future tests"

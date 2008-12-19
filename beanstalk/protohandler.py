@@ -18,10 +18,16 @@ conatining the response. The handler is a generator that when fed data will
 yeild None when more input is expected, and the results dict when all the data
 is provided. Further, it has an attribute, remaining, which is an integer that
 specifies how many bytes are still expected in the data portion of a reply.
+
+This may seem a bit round-about, but it allows for many different styles* of
+programming to use the same bit of code for implementing the protocol.
+
+* e.g. the simple syncronous connection and the twisted client both use this :)
 """
 
 import yaml
-import re, itertools
+import re
+from itertools import izip, imap
 from functools import wraps
 from errors import checkError
 import errors
@@ -31,20 +37,53 @@ MAX_JOB_SIZE = (2**16) - 1
 
 class ExpectedData(Exception): pass
 
+class Response(object):
+    '''This is a simple object for describing the expected response to a
+    command. It is intended to be subclassed, and the subclasses to be named
+    in such a way as to describe the response.  For example, I've used
+    OK for the expected normal response, and Buried for the cases where
+    a command can result in a burried job.
+
+    Arguments/attributes:
+        word: the first word sent back from the server (eg OK)
+        args: the server replies with space separated positional arguments,
+              this describes the names of those argumens
+        hasData: boolean stating whether or not to expect a data stream after
+                 the response line
+        parsefunc: a function, used to transform the data. This will be called
+                   just prior to returning the dict, and its result will
+                   be under the key 'data'
+    '''
+    parsefunc = (lambda x: x)
+    def __init__(self, word, args =None , hasData = False, parsefunc = None):
+        self.word = word
+        self.args = args if args else []
+        self.hasData = hasData
+        if parsefunc:
+            self.parsefunc = parsefunc
+
+    def __str__(self):
+        '''will fail if attr name hasnt been set by subclass or program'''
+        return self.__class__.__name__.lower()
+
+class OK(Response): pass
+class TimeOut(Response): pass
+class Buried(Response): pass
+
 def intit(val):
     try: return int(val)
     except: return val
 
 
 class Handler(object):
-    def __init__(self, ok, full=None, ok_args=[], full_args=[], \
-        has_data=False, parse=(lambda x: x)):
+    '''
+    Handler: generic respsonse consumer for beanstalk.
 
-        self.lookup = {ok:(ok_args,'ok')}
-        if full:
-            self.lookup[full] = (full_args, 'buried')
+    Each handler object has a __call__ method, allowing it to be fed data.
+    '''
+    def __init__(self, *responses):
 
-        self.has_data = has_data
+        self.lookup =  dict((r.word, r) for r in responses)
         self.parse = parse
         self.remaining = 10
 
@@ -55,12 +94,20 @@ class Handler(object):
     def __call__(self, val):
         return self.__h(val)
 
+    # Note: this takes advanage of 2.5+ style generators. The syntax:
+    # x = (yeild value)
+    # yeilds the value, and expects x.send(foo) to be called. Foo will be
+    # assigned to x.
     def handler(self):
         eol = '\r\n'
 
         response = ''
         sep = ''
 
+        # TODO: figure out the max possible response line, and set the default
+        # remaining to that amount. check for sep or that amount of data...
+        # its a bit of a sanity check, as this could be attacked.
+        #
         while not sep:
             response += (yield None)
             response, sep, data = response.partition(eol)
@@ -70,12 +117,12 @@ class Handler(object):
         response = response.split(' ')
         word = response.pop(0)
 
-        args, state = self.lookup.get(word, ([],''))
+        resp = self.lookup.get(word, None)
 
         # sanity checks
-        if not state:
+        if not resp:
             errstr = "Repsonse was: %s %s" % (word, ' '.join(response))
-        elif len(response) != len(args):
+        elif len(response) != len(resp.args):
             errstr = "Repsonse %s had wrong # args, got %s (expected %s)"
             errstr %= (word, response, args)
         else: # all good
@@ -83,10 +130,10 @@ class Handler(object):
 
         if errstr: raise errors.UnexpectedResponse(errstr)
 
-        reply = dict(itertools.izip(args, itertools.imap(intit, response)))
-        reply['state'] = state
+        reply = dict(izip(resp.args, imap(intit, response)))
+        reply['state'] = str(resp)
 
-        if not self.has_data:
+        if not resp.has_data:
             self.remaining = 0
             yield reply
             return
@@ -101,20 +148,31 @@ class Handler(object):
         if not data.endswith(eol) or not (len(data) == reply['bytes']+2):
             raise errors.ExpectedCrlf('Data not properly sent from server')
 
-        reply['data'] = self.parse(data.rstrip(eol))
+        reply['data'] = resp.parsefunc(data.rstrip(eol))
         yield reply
         return
 
-# this decorator gets rid of a lot of cruft around protocol commands,
-# making the protocol easier to read. The interaction decorator takes
-# the args that describe the response, the following function only needs
-# to create a command line to the server
-def interaction(*args, **kw):
+# since the beanstalk protocol uses a simple command-response structure,
+# this decorator makes life easy.  The function it wraps corresponds to a
+# beanstalk command, and returns the appropriate command text.
+# This decorator sets up the structure for handling a response.
+#
+# One thing that may be a bit tricky for those who aren't familiar with python
+# decorators: This changes return value for command function. The functions
+# return a single sting, but after decoration return a tuple of:
+#      (string, handler)
+def interaction(*responses):
+    '''Decorator-facotry for process_* protocol functions. Takes N response objects
+    as arguments, and returns decorator.
+
+    The decorator replaces the wrapped function, and returns the result of
+    the orginal function, as well as a response handler set up to use the
+    expected responses.'''
     def deco(func):
         @wraps(func)
-        def newfunc(*fargs, **fkw):
-            line = func(*fargs, **fkw)
-            handler = Handler(*args, **kw)
+        def newfunc(*args, **kw):
+            line = func(*args, **kw)
+            handler = Handler(*responses)
             return (line, handler)
         return newfunc
     return deco
@@ -125,7 +183,7 @@ def check_name(name):
     if not _namematch.match(name):
         raise errors.BadFormat('Illegal name')
 
-@interaction(ok='INSERTED', ok_args=['jid'], full='BURIED', full_args=['jid'])
+@interaction(OK('INSERTED',['jid']), Buried('BURIED', ['jid']))
 def process_put(data, pri=1, delay=0, ttr=60):
     """
     put
@@ -146,7 +204,7 @@ def process_put(data, pri=1, delay=0, ttr=60):
     putline = 'put %(pri)s %(delay)s %(ttr)s %(dlen)s\r\n%(data)s\r\n'
     return putline % locals()
 
-@interaction('USING', ok_args=['tube'])
+@interaction(OK('USING', ['tube']))
 def process_use(tube):
     '''
     use
@@ -158,7 +216,7 @@ def process_use(tube):
     check_name(tube)
     return 'use %s\r\n' % (tube,)
 
-@interaction('RESERVED', ok_args=['jid','bytes'], has_data=True)
+@interaction(OK('RESERVED', ['jid','bytes'], True))
 def process_reserve():
     '''
      reserve
@@ -174,7 +232,29 @@ def process_reserve():
     x = 'reserve\r\n'
     return x
 
-@interaction(ok='DELETED')
+@interaction(OK('RESERVED', ['jid','bytes'], True), TimedOut('TIMED_OUT'))
+def process_reserve_with_timeout(timeout=0):
+    '''
+     reserve
+        send:
+            reserve-with-timeout <timeout>
+
+        return:
+            RESERVED <id> <bytes>
+            <data>
+
+            TIME_OUT
+
+            DEADLINE_SOON
+    Note: After much internal debate I chose to go this route,
+    with hte one-to-one mappaing of function to protocol command. Higher level
+    objects, like the connection objects, can combine these if they see fit.
+    '''
+    if int(timeout) < 0:
+        raise AttributeError('timeoute must be greater than 0')
+    return 'reserve-with-timeout %s' % (timeout,)
+
+@interaction(OK('DELETED'))
 def process_delete(jid):
     """
     delete
@@ -187,7 +267,7 @@ def process_delete(jid):
     """
     return 'delete %s\r\n' % (jid,)
 
-@interaction(ok='RELEASED', full='BURIED')
+@interaction(OK('RELEASED'), Buried('BURIED'))
 def process_release(jid, pri=1, delay=0):
     """
     release
@@ -201,7 +281,12 @@ def process_release(jid, pri=1, delay=0):
     """
     return 'release %(jid)s %(pri)s %(delay)s\r\n' % locals()
 
-@interaction(ok='BURIED')
+# XXX: semantic question: is this better being an OK since burried is the
+# expected response. Or is it better being a burried since it is the more
+# accurate description, but breaking the rest of semantics of the code?
+#   ^^ this isnt a pressing issue, because for now we still return a
+#      state string pair, which is currently backwards compatible
+@interaction(OK('BURIED'))
 def process_bury(jid, pri=1):
     """
     bury
@@ -214,7 +299,7 @@ def process_bury(jid, pri=1):
     """
     return 'bury %(jid)s %(pri)s\r\n' % locals()
 
-@interaction(ok='WATCHING', ok_args=['count'])
+@interaction(OK('WATCHING', ['count']))
 def process_watch(tube):
     '''
     watch
@@ -226,7 +311,7 @@ def process_watch(tube):
     check_name(tube)
     return 'watch %s\r\n' % (tube,)
 
-@interaction(ok='WATCHING', ok_args=['count'])
+@interaction(OK('WATCHING', ['count']))
 def process_ignore(tube):
     '''
     ignore
@@ -240,7 +325,7 @@ def process_ignore(tube):
     check_name(tube)
     return 'ignore %s\r\n' % (tube,)
 
-@interaction(ok='FOUND', ok_args=['jid','bytes'], has_data = True)
+@interaction(OK('FOUND', ['jid','bytes'], True))
 def process_peek(jid = 0):
     """
     peek
@@ -256,7 +341,7 @@ def process_peek(jid = 0):
     if jid:
         return 'peek %s\r\n' % (jid,)
 
-@interaction(ok='FOUND', ok_args=['jid','bytes'], has_data = True)
+@interaction(OK('FOUND', ['jid','bytes'], True))
 def process_peek_ready():
     '''
     peek-ready
@@ -264,12 +349,11 @@ def process_peek_ready():
             peek-ready
         return:
             NOT_FOUND
-            FOUND
             FOUND <id> <bytes>
     '''
     return 'peek-ready\r\n'
 
-@interaction(ok='FOUND', ok_args=['jid','bytes'], has_data = True)
+@interaction(OK('FOUND', ['jid','bytes'], True))
 def process_peek_delayed():
     '''
     peek-delayed
@@ -277,12 +361,11 @@ def process_peek_delayed():
             peek-delayed
         return:
             NOT_FOUND
-            FOUND
             FOUND <id> <bytes>
     '''
     return 'peek-delayed\r\n'
 
-@interaction(ok='FOUND', ok_args=['jid','bytes'], has_data = True)
+@interaction(OK('FOUND', ['jid','bytes'], True))
 def process_peek_buried():
     '''
     peek-buried
@@ -294,7 +377,7 @@ def process_peek_buried():
     '''
     return 'peek-buried\r\n'
 
-@interaction(ok='KICKED', ok_args = ['count'])
+@interaction(OK('KICKED', ['count']))
 def process_kick(bound=10):
     """
     kick
@@ -331,7 +414,7 @@ def process_stats():
     """
     return 'stats\r\n'
 
-@interaction(ok='OK', ok_args=['bytes'], has_data=True, parse=yaml.load)
+@interaction(OK('OK', ['bytes'], True, yaml.load))
 def process_stats_job(jid):
     """
     stats
@@ -345,7 +428,7 @@ def process_stats_job(jid):
     """
     return 'stats-job %s\r\n' % (jid,)
 
-@interaction(ok='OK', ok_args=['bytes'], has_data=True, parse=yaml.load)
+@interaction(OK('OK', ['bytes'], True, yaml.load))
 def process_stats_tube(tube):
     """
     stats
@@ -360,7 +443,7 @@ def process_stats_tube(tube):
     check_name(tube)
     return 'stats-tube %s\r\n' % (tube,)
 
-@interaction(ok='OK', ok_args=['bytes'], has_data=True, parse=yaml.load)
+@interaction(OK('OK', ['bytes'], True, yaml.load))
 def process_list_tubes():
     '''
     list-tubes
@@ -372,7 +455,7 @@ def process_list_tubes():
     '''
     return 'list-tubes\r\n'
 
-@interaction('USING', ok_args = ['tube'])
+@interaction(OK('USING', ['tube']))
 def process_list_tube_used():
     '''
     list-tube-used
@@ -383,7 +466,7 @@ def process_list_tube_used():
     '''
     return 'list-tube-used\r\n'
 
-@interaction(ok='OK', ok_args=['bytes'], has_data=True, parse=yaml.load)
+@interaction(OK('OK', ['bytes'], True, yaml.load))
 def process_list_tubes_watched():
     '''
     list-tubes-watched
