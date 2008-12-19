@@ -1,5 +1,12 @@
 import socket, sys
+from collections import dequeue
 import protohandler
+
+class Command(object):
+    def __init__(callback, command, handler):
+        self.callback = callback
+        self.comand = command
+        self.handler = handler
 
 class LibeventConn(object):
     '''LibeventConn -- Like other connection types in pybeanstalk, is
@@ -115,11 +122,9 @@ class LibeventConn(object):
         return (rc, ec, rca)
 
     def __getattr__(self, attr):
-        def caller(*args, **kw):
-            idata = dict()
-            idata['callbacks'] = self._setup_callbacks(kw)
-            idata['line'], idata['handler'] =\
-                getattr(protohandler, 'process_%s' % (attr,))(*args, **kw)
+        def caller(callback, *args, **kw):
+            cmd = Command(callback,
+                *getattr(protohandler, 'process_%s' % (attr,))(*args, **kw)
             return self._do_interaction(idata)
         return caller
 
