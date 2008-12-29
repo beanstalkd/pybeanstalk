@@ -124,7 +124,7 @@ class LibeventConn(object):
     def __getattr__(self, attr):
         def caller(callback, *args, **kw):
             cmd = Command(callback,
-                *getattr(protohandler, 'process_%s' % (attr,))(*args, **kw)
+                *getattr(protohandler, 'process_%s' % (attr,))(*args, **kw))
             return self._do_interaction(idata)
         return caller
 
