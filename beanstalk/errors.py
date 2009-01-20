@@ -22,7 +22,7 @@ class UnexpectedResponse(ProtoError): pass
 def checkError(linestr):
     '''Note, this will throw an error internally for every case that is a
     response that is NOT an error response, and that error will be caught,
-    and CheckError will return happily.
+    and checkError will return happily.
 
     In the case that an error was returned by beanstalkd, an appropriate error
     will be raised'''

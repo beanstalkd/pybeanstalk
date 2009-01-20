@@ -77,7 +77,7 @@ def intit(val):
 
 class Handler(object):
     '''
-    Handler: generic respsonse consumer for beanstalk.
+    Handler: generic response consumer for beanstalk.
 
     Each handler object has a __call__ method, allowing it to be fed data.
     '''
@@ -95,8 +95,8 @@ class Handler(object):
         return self.__h(val)
 
     # Note: this takes advanage of 2.5+ style generators. The syntax:
-    # x = (yeild value)
-    # yeilds the value, and expects x.send(foo) to be called. Foo will be
+    # x = (yield value)
+    # yields the value, and expects x.send(foo) to be called. Foo will be
     # assigned to x.
     def handler(self):
         eol = '\r\n'
@@ -121,9 +121,9 @@ class Handler(object):
 
         # sanity checks
         if not resp:
-            errstr = "Repsonse was: %s %s" % (word, ' '.join(response))
+            errstr = "Response was: %s %s" % (word, ' '.join(response))
         elif len(response) != len(resp.args):
-            errstr = "Repsonse %s had wrong # args, got %s (expected %s)"
+            errstr = "Response %s had wrong # args, got %s (expected %s)"
             errstr %= (word, response, args)
         else: # all good
             errstr = ''
@@ -162,11 +162,11 @@ class Handler(object):
 # return a single sting, but after decoration return a tuple of:
 #      (string, handler)
 def interaction(*responses):
-    '''Decorator-facotry for process_* protocol functions. Takes N response objects
+    '''Decorator-factory for process_* protocol functions. Takes N response objects
     as arguments, and returns decorator.
 
     The decorator replaces the wrapped function, and returns the result of
-    the orginal function, as well as a response handler set up to use the
+    the original function, as well as a response handler set up to use the
     expected responses.'''
     def deco(func):
         @wraps(func)

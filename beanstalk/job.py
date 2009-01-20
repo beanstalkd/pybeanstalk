@@ -13,11 +13,11 @@ def honorimmutable(func):
     return deco
 
 class Job(object):
-    ''' class Job is and optional class for keeping track of jobs returned
+    ''' class Job is an optional class for keeping track of jobs returned
     by the beanstalk server.
 
     It is designed to be as flexible as possible, with a minimal number of extra
-    methods. (See below).  It has 4 protocl methods, for dealing with the
+    methods. (See below).  It has 4 protocol methods, for dealing with the
     server via a connection object. It also has 2 methods, _serialize and
     _unserialize for dealing with the data returned by beanstalkd. These
     default to a simple yaml dump and load respectively.

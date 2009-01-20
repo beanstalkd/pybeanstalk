@@ -10,11 +10,11 @@ class Command(object):
 
 class LibeventConn(object):
     '''LibeventConn -- Like other connection types in pybeanstalk, is
-    intended to only handle the benstalk related connections. This connection
+    intended to only handle the beanstalk related connections. This connection
     works much the same as ServerConn, and its initialization variables are
     the same.
 
-    The connection object also has a few special properies:
+    The connection object also has a few special properties:
     result_callback -- callable object, must take at least one argument,
                        a response (or job if job is set and the protocol
                        interaction returns a job), which will be the default
@@ -29,7 +29,7 @@ class LibeventConn(object):
     defaults (but otherwise work the same) above.
 
     NOTE: I haven't included the convenience of the tube and watchlist
-    properties in this connection type because I am still unsure of hte best
+    properties in this connection type because I am still unsure of the best
     way to handle them.
     '''
 
@@ -78,7 +78,7 @@ class LibeventConn(object):
             recv = self._socket.recv(handler.remaining)
             resp = handler(recv)
             if resp:
-                # were done here, set up a timer for the minimum and call the
+                # we're done here, set up a timer for the minimum and call the
                 # official callback.  Do this so that longer running jobs
                 # dont do too much damage. Also in the case of e.g. stakless,
                 # this wont interfere with the libevent loop as much
