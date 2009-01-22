@@ -84,7 +84,6 @@ class Handler(object):
     def __init__(self, *responses):
 
         self.lookup =  dict((r.word, r) for r in responses)
-        self.parse = parse
         self.remaining = 10
 
         h = self.handler()
@@ -133,7 +132,7 @@ class Handler(object):
         reply = dict(izip(resp.args, imap(intit, response)))
         reply['state'] = str(resp)
 
-        if not resp.has_data:
+        if not resp.hasData:
             self.remaining = 0
             yield reply
             return
@@ -389,7 +388,7 @@ def process_kick(bound=10):
     """
     return 'kick %s\r\n' % (bound,)
 
-@interaction(ok='TOUCHED')
+@interaction(OK('TOUCHED'))
 def process_touch(jid):
     """
     touch
@@ -402,7 +401,7 @@ def process_touch(jid):
     """
     return 'touch %s\r\n' % (jid,)
 
-@interaction(ok='OK', ok_args=['bytes'], has_data=True, parse=yaml.load)
+@interaction(OK('OK', ['bytes'], True, yaml.load))
 def process_stats():
     """
     stats
