@@ -32,7 +32,7 @@ prototest_info = [
     ],
     [
         ('process_reserve_with_timeout', (4,)),
-        'reserve\r\n',
+        'reserve-with-timeout 4\r\n',
         [
             ('RESERVED 12 5\r\nabcde\r\n',{'state':'ok', 'bytes': 5, 'jid':12,
                 'data':'abcde'}),

@@ -229,8 +229,8 @@ def test_reserve_deadline_soon():
     assert jid == job['jid'], "Didn't get test job, something funky is happening."
     # a bit of padding to make sure that deadline soon is encountered
     time.sleep(.2)
-    assert_raises(errors.DeadlineSoon, conn.reserve, 'Job should have warned '
-                  'of impending deadline. It did not. This is a problem!')
+    assert_raises(errors.DeadlineSoon, conn.reserve), "Job should have warned "\
+                  "of impending deadline. It did not. This is a problem!"
     x = conn.delete(jid)
     assert x['state'] == 'ok', "Didn't delete the job right. This could break future tests"
 

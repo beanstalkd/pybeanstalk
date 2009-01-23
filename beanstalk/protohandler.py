@@ -54,20 +54,22 @@ class Response(object):
                    just prior to returning the dict, and its result will
                    be under the key 'data'
     '''
-    parsefunc = (lambda x: x)
+
     def __init__(self, word, args =None , hasData = False, parsefunc = None):
         self.word = word
         self.args = args if args else []
         self.hasData = hasData
         if parsefunc:
             self.parsefunc = parsefunc
+        else:
+            self.parsefunc = (lambda x: x)
 
     def __str__(self):
         '''will fail if attr name hasnt been set by subclass or program'''
         return self.__class__.__name__.lower()
 
 class OK(Response): pass
-class TimedOut(Response): pass
+class TimeOut(Response): pass
 class Buried(Response): pass
 
 def intit(val):
@@ -231,7 +233,7 @@ def process_reserve():
     x = 'reserve\r\n'
     return x
 
-@interaction(OK('RESERVED', ['jid','bytes'], True), TimedOut('TIMED_OUT'))
+@interaction(OK('RESERVED', ['jid','bytes'], True), TimeOut('TIMED_OUT'))
 def process_reserve_with_timeout(timeout=0):
     '''
      reserve
@@ -250,8 +252,8 @@ def process_reserve_with_timeout(timeout=0):
     objects, like the connection objects, can combine these if they see fit.
     '''
     if int(timeout) < 0:
-        raise AttributeError('timeoute must be greater than 0')
-    return 'reserve-with-timeout %s' % (timeout,)
+        raise AttributeError('timeout must be greater than 0')
+    return 'reserve-with-timeout %s\r\n' % (timeout,)
 
 @interaction(OK('DELETED'))
 def process_delete(jid):
