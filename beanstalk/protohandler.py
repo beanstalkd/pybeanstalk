@@ -69,7 +69,7 @@ class Response(object):
         return self.__class__.__name__.lower()
 
 class OK(Response): pass
-class TimedOut(Response): pass
+class TimeOut(Response): pass
 class Buried(Response): pass
 
 def intit(val):
