@@ -23,9 +23,17 @@ This may seem a bit round-about, but it allows for many different styles* of
 programming to use the same bit of code for implementing the protocol.
 
 * e.g. the simple syncronous connection and the twisted client both use this :)
+
+NOTE: there are mre lines of documentation in this file than lines of code.
+It may be that I need to practice terseness in this form as much as i do with
+my code...
 """
 
 import yaml
+class yaml(object):
+    def load(self, text):
+        return text
+
 import re
 from itertools import izip, imap
 from functools import wraps
@@ -34,6 +42,22 @@ import errors
 
 # default value on server
 MAX_JOB_SIZE = (2**16) - 1
+
+
+def protProvider(cls):
+    ''' Class decorator to be applied to anything that we want to provide the
+    beanstalk protocol (e.g. connections).  This will implement all the
+    protocol functions (i.e. process_*) as methods in the class that is
+    decorated. in ver < py2.6 this should be cls = protProvider(cls), in
+    2.6 and higher, they got all nice and implemented the decorator sugar for
+    classes'''
+    for name, value in globals().items():
+        if not name.startswith('process_'):
+            continue
+        name = name.partition('_')[2]
+        setattr(cls, name, staticmethod(value))
+
+    return cls
 
 class ExpectedData(Exception): pass
 
@@ -414,6 +438,7 @@ def process_stats():
             <data> (YAML struct)
     """
     return 'stats\r\n'
+
 
 @interaction(OK('OK', ['bytes'], True, yaml.load))
 def process_stats_job(jid):
