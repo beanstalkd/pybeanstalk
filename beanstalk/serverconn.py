@@ -92,11 +92,12 @@ class ServerConn(object):
 
     def __getattribute__(self, attr):
         res = super(ServerConn, self).__getattribute__(attr)
-        if not res.__name__.startswith('process_'):
+        if not hasattr(res, "__name__") or not res.__name__.startswith('process_'):
             return res
         def caller(*args, **kw):
-            return self._do_interaction(res(*args, **kw))
+            return self._do_interaction(*res(*args, **kw))
         return caller
+
 ServerConn = protohandler.protProvider(ServerConn)
 
 class ThreadedConn(ServerConn):

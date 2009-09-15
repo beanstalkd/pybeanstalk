@@ -29,11 +29,9 @@ It may be that I need to practice terseness in this form as much as i do with
 my code...
 """
 
-import yaml
-class yaml(object):
-    def load(self, text):
-        return text
 
+import yaml
+import StringIO
 import re
 from itertools import izip, imap
 from functools import wraps
@@ -42,6 +40,10 @@ import errors
 
 # default value on server
 MAX_JOB_SIZE = (2**16) - 1
+
+def load_yaml(yaml_string):
+    handler = StringIO.StringIO(yaml_string)
+    return yaml.load(handler)
 
 
 def protProvider(cls):
@@ -427,7 +429,7 @@ def process_touch(jid):
     """
     return 'touch %s\r\n' % (jid,)
 
-@interaction(OK('OK', ['bytes'], True, yaml.load))
+@interaction(OK('OK', ['bytes'], True, load_yaml))
 def process_stats():
     """
     stats
@@ -440,7 +442,7 @@ def process_stats():
     return 'stats\r\n'
 
 
-@interaction(OK('OK', ['bytes'], True, yaml.load))
+@interaction(OK('OK', ['bytes'], True, load_yaml))
 def process_stats_job(jid):
     """
     stats
@@ -454,7 +456,7 @@ def process_stats_job(jid):
     """
     return 'stats-job %s\r\n' % (jid,)
 
-@interaction(OK('OK', ['bytes'], True, yaml.load))
+@interaction(OK('OK', ['bytes'], True, load_yaml))
 def process_stats_tube(tube):
     """
     stats
@@ -469,7 +471,7 @@ def process_stats_tube(tube):
     check_name(tube)
     return 'stats-tube %s\r\n' % (tube,)
 
-@interaction(OK('OK', ['bytes'], True, yaml.load))
+@interaction(OK('OK', ['bytes'], True, load_yaml))
 def process_list_tubes():
     '''
     list-tubes
@@ -492,7 +494,7 @@ def process_list_tube_used():
     '''
     return 'list-tube-used\r\n'
 
-@interaction(OK('OK', ['bytes'], True, yaml.load))
+@interaction(OK('OK', ['bytes'], True, load_yaml))
 def process_list_tubes_watched():
     '''
     list-tubes-watched
