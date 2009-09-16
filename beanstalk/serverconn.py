@@ -47,9 +47,9 @@ class ServerConn(object):
         data = ''
         pcount = 0
         while True:
-            if self.poller and not self.poller.poll(1):
+            if _debug and self.poller and not self.poller.poll(1):
                 pcount += 1
-                if pcount >= 20 and _debug:
+                if pcount >= 20:
                     raise Exception('poller timeout %s times in a row' % (pcount,))
                 else: continue
             pcount = 0
