@@ -52,6 +52,7 @@ class Job(object):
         self.imutable = bool(kw.get('imutable', False))
         self._from_queue = bool(kw.get('from_queue', False))
         self.tube = kw.get('tube', 'default')
+        self.ttr = kw.get('ttr', 60)
 
     def __del__(self):
         self.Finish()
@@ -75,7 +76,7 @@ class Job(object):
         oldtube = self.conn.tube
         if oldtube != self.tube:
             self.conn.use(self.tube)
-        self.conn.put(self._serialize(), self.priority, self.delay)
+        self.conn.put(self._serialize(), self.priority, self.delay, self.ttr)
         if oldtube != self.tube:
             self.conn.use(oldtube)
 
