@@ -5,7 +5,7 @@ import random
 import protohandler
 from serverconn import ServerConn
 
-_debug = False
+_debug = True
 
 class Server(object):
     """An incredibly lightweight implementation of a object that only has
@@ -36,7 +36,6 @@ class Server(object):
             self.socket.close()
 
 
-
 class ServerPool(ServerConn):
     """ServerPool is a concrete implementation of ServerConn with distributed
     server support.
@@ -53,8 +52,6 @@ class ServerPool(ServerConn):
             self.add_server(ip, port)
         #random seed by local time
         random.seed()
-        #initiate connections
-        self.__makeConn()
     
     def remove_server(self, ip, port=None):
         """Removes the server from the server list and returns True on success.
@@ -91,7 +88,10 @@ class ServerPool(ServerConn):
                 return False
         
         self.servers.append(s)
+        #initiate connections
         self.__makeConn()
+        #add maximum job size, this is redundant..
+        protohandler.MAX_JOB_SIZE = self.stats()['data']['max-job-size']
         return True
 
     def fileno(self):
@@ -110,9 +110,6 @@ class ServerPool(ServerConn):
                 assert server.socket #sanity check
                 if self.poller:
                     self.poller.register(server.socket, select.POLLIN)
-            else: 
-                #magic!
-                protohandler.MAX_JOB_SIZE = self.stats()['data']['max-job-size']
 
     def __writeline(self, line):
         #TODO: implement round robin, although honestly, random is 
@@ -124,6 +121,7 @@ class ServerPool(ServerConn):
             while not random_server.socket:
                 if retry == 5: 
                     raise protohandler.errors.ProtoError("Not ready!")
+                retry += 1
                 random_server = random.choice(self.servers)
             #check if the server is connected here as well? 
             random_server.socket.sendall(line)

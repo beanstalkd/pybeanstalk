@@ -31,7 +31,7 @@ processes = []
 conn = None
 
 def setup():
-    global processes, connections, config
+    global processes, conn, config
     output = "server started on %(ip)s:%(port)s with PID: %(pid)s"
 
     L = config.BEANSTALKD_HOSTS.split(';')
@@ -177,8 +177,11 @@ def test_ServerConn_can_bury_and_kick_a_job():
 def test_ServerConn_fails_to_connect_with_a_reasonable_exception():
     # it may be nicer not to throw a socket error here?
     try:
-        serverconn.ServerConn(config.BEANSTALKD_HOST,
-                              config.BEANSTALKD_PORT+1)
+        L = config.BEANSTALKD_HOSTS.split(';')
+        C = int(config.BEANSTALKD_COUNT)
+        S = int(config.BEANSTALKD_PORT_START)
+        #add a new server with a port that is most likely not open
+        multiserverconn.ServerPool([(L[0], S+C+1)])
     except socket.error, reason:
         pass
 
