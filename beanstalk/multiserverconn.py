@@ -23,6 +23,18 @@ class Server(object):
         for arg, value in locals().iteritems():
             if arg in self.__slots__: 
                 setattr(self, arg, value)
+    
+    def __cmp__(self, comparable):
+        #for unit testing
+        assert isinstance(comparable, Server)
+        return not any([cmp(self.ip, comparable.ip),
+                        cmp(self.port, comparable.port)])
+                        
+    def close_connection(self):
+        """Closes the socket connection if open"""
+        if self.socket:
+            self.socket.close()
+
 
 
 class ServerPool(ServerConn):
@@ -44,24 +56,57 @@ class ServerPool(ServerConn):
         #initiate connections
         self.__makeConn()
     
-    def remove_server(self, ip):
-        target = filter(lambda server: server.ip == server, self.servers)
+    def remove_server(self, ip, port=None):
+        """Removes the server from the server list and returns True on success.
+        Else, if the target server doesn't exist, Returns false.
+        
+        If port is None, then all internal matching server ips are removed.
+
+        """
+        def compare_server(server):
+            matching_port = True
+            if port:
+                matching_port = cmp(server.port, port)
+            return cmp(server.ip, ip) and matching_port
+
+        target = filter(compare_server, self.servers)
         if target:
-            self.servers.remove(target)
+            for t in target:
+                self.poller.unregister(t)
+                t.close_connection()
+                self.servers.remove(t)
         return bool(target)
 
     def add_server(self, ip, port):
-        self.servers.append(Server(ip, port))             
+        """Checks if the server doesn't already exist and adds it. Returns
+        True on successful addition or False if the server already exists. 
+
+        Upon server addition, the server socket is automatically created
+        and a connection is created.
+
+        """
+        s = Server(ip, port)
+        for server in self.servers:
+            if not cmp(s, server):
+                return False
+        
+        self._add_server_socket(s)
+        self.servers.append(s)
+        return True
 
     def fileno(self):
         return map(lambda server: server.socket.fileno(), self.servers)
 
+    def _add_server_socket(self, server):
+        server.socket = socket.socket()
+        #TODO: check if we can connect, if not, log and REMOVE SERVER
+        #if there are no more servers left, raise the socket error
+        server.socket.connect(tuple(server.ip, server.port))
+
     def __makeConn(self):
         for server in self.servers:
-            server.socket = socket.socket()
-            #TODO: check if we can connect, if not, log and REMOVE SERVER
-            #if there are no more servers left, raise the socket error
-            server.socket.connect(tuple(server.ip, server.port))
+            self._add_server_socket(server)
+            assert server.socket #sanity check
             if self.poller:
                 self.poller.register(server.socket, select.POLLIN)
         #magic!
@@ -97,7 +142,7 @@ class ServerPool(ServerConn):
                 #remove from poller
                 self.poller.unregister(server.socket)
                 #close the socket
-                server.socket.close()
+                server.close_connection()
                 try:
                     #try to remove from the server list
                     self.servers.remove(server)
