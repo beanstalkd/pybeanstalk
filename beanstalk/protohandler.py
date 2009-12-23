@@ -30,13 +30,15 @@ my code...
 """
 
 
-import yaml
 import StringIO
 import re
 from itertools import izip, imap
 from functools import wraps
-from errors import checkError
+
+import yaml
+
 import errors
+from errors import checkError
 
 # default value on server
 MAX_JOB_SIZE = (2**16) - 1
