@@ -1,5 +1,5 @@
 """
-ServerConn tests.
+MultiServerConn tests.
 
 These tests are easiest run with nose, that's why they are free of
 xUnit cruft ;)
@@ -9,43 +9,57 @@ others.  Probably best to setup a new beanstalkd at each test.
 """
 
 import os
+import sys
 import signal
 import socket
 import time
+import subprocess
+import itertools 
 
 from nose.tools import with_setup, assert_raises
 import nose
 
-from beanstalk import serverconn
+from beanstalk import multiserverconn
 from beanstalk import errors
 from config import get_config
 
-config = get_config("ServerConn")
 
 # created during setup
-server_pid = None
+config = get_config("MultiServerConn")
+
+processes = []
 conn = None
 
-
 def setup():
-    global server_pid, conn, config
-    server_pid = os.spawnl(os.P_NOWAIT,
-                            os.path.join(config.BPATH,config.BEANSTALKD),
-                            os.path.join(config.BPATH,config.BEANSTALKD),
-                            '-l', config.BEANSTALKD_HOST,
-                            '-p', config.BEANSTALKD_PORT
-                            )
-    print "server started at process", server_pid
-    time.sleep(0.1)
-    conn = serverconn.ServerConn(config.BEANSTALKD_HOST, int(config.BEANSTALKD_PORT))
+    global processes, connections, config
+    output = "server started on %(ip)s:%(port)s with PID: %(pid)s"
+
+    L = config.BEANSTALKD_HOSTS.split(';')
+    C = int(config.BEANSTALKD_COUNT)
+    S = int(config.BEANSTALKD_PORT_START)
+    binloc = os.path.join(config.BPATH, config.BEANSTALKD)
+    conn = multiserverconn.ServerPool([])
+
+    for ip, port in itertools.izip_longest(L, xrange(S, S+C), fillvalue=L[0]):
+        process = subprocess.Popen([binloc, "-l", str(ip), "-p", str(port)])
+        processes.append(process)
+        print output % { "ip" : ip, "port" : port, "pid" : process.pid }
+        time.sleep(0.1)
+        try:
+            conn.add_server(ip, port)
+        except Exception, e:
+            processes.pop().kill()
+            raise
+
 
 def teardown():
-    print "terminating beanstalkd at", server_pid
-    os.kill(server_pid, signal.SIGTERM)
-
+    global processes
+    output = "terminating beanstalkd with PID: %(pid)s"
+    for process in processes:
+        print output % {"pid" : process.pid}
+        process.kill()
 
 # Test helpers:
-
 def _test_put_reserve_delete_a_job(payload, pri):
     # check preconditions
     assert conn.stats()['data']['current-jobs-ready'] == 0, "The server is not empty "\
@@ -164,7 +178,7 @@ def test_ServerConn_fails_to_connect_with_a_reasonable_exception():
     # it may be nicer not to throw a socket error here?
     try:
         serverconn.ServerConn(config.BEANSTALKD_HOST,
-                              int(config.BEANSTALKD_PORT)+1)
+                              config.BEANSTALKD_PORT+1)
     except socket.error, reason:
         pass
 

@@ -2,7 +2,7 @@ import socket
 import select
 import random
 
-from protohandler.errors import ProtoError
+import protohandler
 from serverconn import ServerConn
 
 _debug = False
@@ -41,15 +41,15 @@ class ServerPool(ServerConn):
     """ServerPool is a concrete implementation of ServerConn with distributed
     server support.
 
-    @serverdict is a dictionary consisting of hostname mapping to port numbers
+    @serverlist is a list of tuples as so: (ip, port)
 
     """
-    def __init__(self, serverdict, job = False):
+    def __init__(self, serverlist, job = False):
         self.poller = getattr(select, 'poll', lambda : None)()
         self.job = job
         #build servers into the self.servers list
         self.servers = []
-        for ip, port in serverdict.iteritems():
+        for ip, port in serverlist:
             self.add_server(ip, port)
         #random seed by local time
         random.seed()
@@ -90,8 +90,8 @@ class ServerPool(ServerConn):
             if not cmp(s, server):
                 return False
         
-        self._add_server_socket(s)
         self.servers.append(s)
+        self.__makeConn()
         return True
 
     def fileno(self):
@@ -101,16 +101,18 @@ class ServerPool(ServerConn):
         server.socket = socket.socket()
         #TODO: check if we can connect, if not, log and REMOVE SERVER
         #if there are no more servers left, raise the socket error
-        server.socket.connect(tuple(server.ip, server.port))
+        server.socket.connect((server.ip, server.port))
 
     def __makeConn(self):
         for server in self.servers:
-            self._add_server_socket(server)
-            assert server.socket #sanity check
-            if self.poller:
-                self.poller.register(server.socket, select.POLLIN)
-        #magic!
-        protohandler.MAX_JOB_SIZE = self.stats()['data']['max-job-size']
+            if not server.socket:
+                self._add_server_socket(server)
+                assert server.socket #sanity check
+                if self.poller:
+                    self.poller.register(server.socket, select.POLLIN)
+            else: 
+                #magic!
+                protohandler.MAX_JOB_SIZE = self.stats()['data']['max-job-size']
 
     def __writeline(self, line):
         #TODO: implement round robin, although honestly, random is 
@@ -118,12 +120,17 @@ class ServerPool(ServerConn):
         try:
             #write a line by picking a random server
             random_server = random.choice(self.servers)
+            retry = 0
+            while not random_server.socket:
+                if retry == 5: 
+                    raise protohandler.errors.ProtoError("Not ready!")
+                random_server = random.choice(self.servers)
             #check if the server is connected here as well? 
             random_server.socket.sendall(line)
             #return the random_server that we sent to
             return random_server
-        except:
-            raise ProtoError
+        except Exception, e:
+            raise protohandler.errors.ProtoError(str(e))
 
     def _get_response(self, server, handler):
         pcount = 0
@@ -148,13 +155,13 @@ class ServerPool(ServerConn):
                     self.servers.remove(server)
                 except ValueError, e:
                     #woah! wtf? server isnt in the server list
-                    raise ProtoError(str(e))
+                    raise protohandler.errors.ProtoError(str(e))
                 #let's check to make sure that servers isnt empty.
                 if not self.servers:
                     msg = "Listening server list is empty." + closedmsg
-                    raise ProtoError(msg)
+                    raise protohandler.errors.ProtoError(msg)
                 #else just raise nor
-                raise ProtoError(closedmsg)
+                raise protohandler.errors.ProtoError(closedmsg)
             res = handler(recv)
             if res: break
 

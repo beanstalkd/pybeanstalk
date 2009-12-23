@@ -1,7 +1,9 @@
 import sys
 sys.path.append('..')
-import config
+from config import get_config
 import nose.tools
+
+config = get_config("ServerConn")
 
 from beanstalk import errors
 
