@@ -24,7 +24,7 @@ class Server(object):
             if arg in self.__slots__: 
                 setattr(self, arg, value)
     
-    def __cmp__(self, comparable):
+    def __eq__(self, comparable):
         #for unit testing
         assert isinstance(comparable, Server)
         return not any([cmp(self.ip, comparable.ip),
