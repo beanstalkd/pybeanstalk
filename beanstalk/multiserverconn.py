@@ -5,11 +5,13 @@ import logging
 
 import protohandler
 from serverconn import ServerConn
+from job import Job
 
 _debug = False
 logger = logging.getLogger(__name__)
 
-
+#TODO: Confirm that this is thread safe. There's no need to 
+#block here at all
 class ServerPool(object):
     """ServerPool is a queue implementation of ServerConns with distributed
     server support.
@@ -23,83 +25,44 @@ class ServerPool(object):
         for ip, port, job in serverlist:
             self.add_server(ip, port, job)
 
-        #random seed by local time
-        random.seed()
-
     def __getattribute__(self, attr):
-        logger.debug("Fetching: %s", attr)
         try:
             res = super(ServerPool, self).__getattribute__(attr)
         except AttributeError:
             logger.debug("Attribute '%s' NOT found, delegating...", attr)
+            pass
         else:
             logger.debug("Attribute found: %s...", res)
             return res
-        
-        random_server = random.choice(self.servers)
+
+        random_server = self.get_random_server()
         logger.debug("Returning %s from %s", attr, random_server)
         return getattr(random_server, attr)
 
-    def ___writeline(self, line):
-        #TODO: implement round robin, although honestly, random is 
-        #slighly better
-        try:
-            #write a line by picking a random server
-            random_server = random.choice(self.servers)
-            retry = 0
-            while not random_server.socket:
-                if retry == 5: 
-                    raise protohandler.errors.ProtoError("Not ready!")
-                retry += 1
-                random_server = random.choice(self.servers)
-            print "&& Sending ", line, " to ", random_server
-            #check if the server is connected here as well? 
-            random_server.socket.sendall(line)
-            #return the random_server that we sent to
-            return random_server
-        except Exception, e:
-            raise protohandler.errors.ProtoError(str(e))
+    def use(self, *args, **kwargs):
+        """Use is overridden because we want to broadcast it to all our
+        internal servers
 
-    def __do_interaction(self, line, handler):
-        server = self.__writeline(line)
-        return self._get_response(server, handler)
+        """
+        for server in self.servers:
+            server.use(*args, **kwargs)
 
-    def __get_response(self, server, handler):
-        pcount = 0
-        while True:
-            if _debug and self.poller and not self.poller.poll(1):
-                pcount += 1
-                if pcount >= 20:
-                    raise Exception('poller timeout %s times in a row' % (pcount,))
-                else: continue
-            pcount = 0
-            recv = server.socket.recv(handler.remaining)
-            if not recv:
-                closedmsg = "Remote server %(server)s:%(port)s has "\
-                            "closed connection" % { "server" : server.ip, 
-                                                    "port" : server.port}
-                #remove from poller
-                self.poller.unregister(server.socket)
-                #close the socket
-                server.close_connection()
-                try:
-                    #try to remove from the server list
-                    self.servers.remove(server)
-                except ValueError, e:
-                    #woah! wtf? server isnt in the server list
-                    raise protohandler.errors.ProtoError(str(e))
-                #let's check to make sure that servers isnt empty.
-                if not self.servers:
-                    msg = "Listening server list is empty." + closedmsg
-                    raise protohandler.errors.ProtoError(msg)
-                #else just raise nor
-                raise protohandler.errors.ProtoError(closedmsg)
-            res = handler(recv)
-            if res: break
+    def _get_watchlist(self):
+        """Returns the global watchlist for all servers"""
+        #TODO: it's late and I'm getting tired, going to just make
+        #a list for now and see maybe later if I want to do a dict
+        #with the server IPs as the keys as well as their watchlist..
+        L = []
+        for server in self.servers:
+            L.extend(server.watchlist)
+        return list(set(L))
 
-        if self.job and 'jid' in res:
-            res = self.job(conn=self,**res)
-        return res
+    def _set_watchlist(self, value):
+        """Sets the watchlist for all global servers"""
+        for server in self.servers:
+            server.watchlist = value
+
+    watchlist = property(_get_watchlist, _set_watchlist)
 
     def _server_cmp(self, ip, port):
         def comparison(server):
@@ -109,10 +72,15 @@ class ServerPool(object):
             return cmp(server.server, ip) and matching_port
         return comparison
 
+    def get_random_server(self):
+        #random seed by local time
+        random.seed()
+        return random.choice(self.servers)
+
     def remove_server(self, ip, port=None):
         """Removes the server from the server list and returns True on success.
         Else, if the target server doesn't exist, Returns false.
-        
+
         If port is None, then all internal matching server ips are removed.
 
         """
@@ -123,9 +91,9 @@ class ServerPool(object):
                 self.servers.remove(t)
         return bool(target)
 
-    def add_server(self, ip, port, job=None):
+    def add_server(self, ip, port, job=Job):
         """Checks if the server doesn't already exist and adds it. Returns
-        True on successful addition or False if the server already exists. 
+        True on successful addition or False if the server already exists.
 
         Upon server addition, the server socket is automatically created
         and a connection is created.
@@ -137,5 +105,4 @@ class ServerPool(object):
             self.servers.append(ServerConn(ip, port, job))
         #return teh opposite of target
         return not bool(target)
-
 

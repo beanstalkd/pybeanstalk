@@ -32,7 +32,7 @@ class ServerConn(object):
 
         self._socket  = None
         self.__makeConn()
-    
+
     def __repr__(self):
         s = "<[%(active)s]ServerConn(%(ip)s:%(port)s)>"
         active_ = "Open" if self._socket else "Closed"
@@ -45,11 +45,11 @@ class ServerConn(object):
         if not hasattr(res, "__name__") or not res.__name__.startswith('process_'):
             return res
         def caller(*args, **kw):
-            logger.info("Calling %s with: args(%s), kwargs(%s)", 
+            logger.info("Calling %s with: args(%s), kwargs(%s)",
                          res.__name__, args, kw)
             return self._do_interaction(*res(*args, **kw))
         return caller
-    
+
     def __eq__(self, comparable):
         #for unit testing
         assert isinstance(comparable, ServerConn)
@@ -82,9 +82,9 @@ class ServerConn(object):
             recv = self._socket.recv(handler.remaining)
             if not recv:
                 closedmsg = "Remote server %(server)s:%(port)s has "\
-                            "closed connection" % { "server" : server.ip, 
+                            "closed connection" % { "server" : server.ip,
                                                     "port" : server.port}
-                self.close() 
+                self.close()
                 raise protohandler.errors.ProtoError(closedmsg)
             res = handler(recv)
             if res: break
@@ -119,7 +119,7 @@ class ServerConn(object):
     @property
     def tube(self):
         return self.list_tube_used()['tube']
-    
+
     def close(self):
         self.poller.unregister(self._socket)
         self._socket.close()
