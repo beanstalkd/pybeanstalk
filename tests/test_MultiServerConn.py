@@ -21,6 +21,8 @@ import nose
 
 from beanstalk import multiserverconn
 from beanstalk import errors
+from beanstalk import job
+
 from config import get_config
 
 
@@ -37,6 +39,8 @@ def setup():
     L = config.BEANSTALKD_HOSTS.split(';')
     C = int(config.BEANSTALKD_COUNT)
     S = int(config.BEANSTALKD_PORT_START)
+    J = getattr(job, config.BEANSTALKD_JOB_CLASS, None)
+        
     binloc = os.path.join(config.BPATH, config.BEANSTALKD)
     conn = multiserverconn.ServerPool([])
 
@@ -46,7 +50,7 @@ def setup():
         print output % { "ip" : ip, "port" : port, "pid" : process.pid }
         time.sleep(0.1)
         try:
-            conn.add_server(ip, port)
+            conn.add_server(ip, port, J)
         except Exception, e:
             processes.pop().kill()
             raise
@@ -58,6 +62,7 @@ def teardown():
     for process in processes:
         print output % {"pid" : process.pid}
         process.kill()
+
 
 # Test helpers:
 def _test_put_reserve_delete_a_job(payload, pri):
@@ -180,8 +185,9 @@ def test_ServerConn_fails_to_connect_with_a_reasonable_exception():
         L = config.BEANSTALKD_HOSTS.split(';')
         C = int(config.BEANSTALKD_COUNT)
         S = int(config.BEANSTALKD_PORT_START)
+        J = getattr(job, config.BEANSTALKD_JOB_CLASS, None)
         #add a new server with a port that is most likely not open
-        multiserverconn.ServerPool([(L[0], S+C+1)])
+        multiserverconn.ServerPool([(L[0], S+C+1, J)])
     except socket.error, reason:
         pass
 

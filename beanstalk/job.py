@@ -33,15 +33,14 @@ class Job(object):
     management on the consumer end.
     '''
 
-    def __init__(self, conn = None, jid=0, pri=0, data='', state = 'ok',**kw):
-        if not conn and not DEFAULT_CONN:
+    def __init__(self, conn = None, jid=0, pri=0, data='', state = 'ok', **kw):
+
+        if not any([conn, DEFAULT_CONN]):
             raise AttributeError("No connection specified")
-        elif not conn:
-            self._conn = DEFAULT_CONN
-        else:
-            self.conn = conn
-        self.id = jid
-        self.priority = pri
+
+        self.conn = conn if conn else DEFAULT_CONN
+        self.jid = jid
+        self.pri = pri
         self.delay = 0
         self.state = state
         if data:
@@ -54,10 +53,25 @@ class Job(object):
         self.tube = kw.get('tube', 'default')
 
     def __del__(self):
+        super(Job, self).__del__()
         self.Finish()
 
     def __str__(self):
         return self._serialize()
+    
+    def __getitem__(self, key):
+        #validate key for TypeError
+        #TODO: make elegant
+        validkey = isinstance(key, basestring)
+        if not validkey:
+            raise TypeError, "Invalid subscript type: %s" % type(key)
+        #return KeyError
+        try:
+            value = getattr(self, key)
+        except AttributeError, e:
+            raise KeyError, e
+        else:
+            return value
 
     def _unserialize(self, data):
         self.data = yaml.load(data)
@@ -75,15 +89,14 @@ class Job(object):
         oldtube = self.conn.tube
         if oldtube != self.tube:
             self.conn.use(self.tube)
-        self.conn.put(self._serialize(), self.priority, self.delay)
+        self.conn.put(self._serialize(), self.pri, self.delay)
         if oldtube != self.tube:
             self.conn.use(oldtube)
-
 
     @honorimmutable
     def Return(self):
         try:
-            self.conn.release(self.id, self.priority, 0)
+            self.conn.release(self.jid, self.pri, 0)
         except errors.NotFound:
             return False
         except:
@@ -94,7 +107,7 @@ class Job(object):
     @honorimmutable
     def Delay(self, delay):
         try:
-            self.conn.release(self.id, self.priority, delay)
+            self.conn.release(self.jid, self.pri, delay)
         except errors.NotFound:
             return False
         except:
@@ -105,7 +118,7 @@ class Job(object):
     @honorimmutable
     def Finish(self):
         try:
-            self.conn.delete(self.id)
+            self.conn.delete(self.jid)
         except errors.NotFound:
             return False
         except:
@@ -116,7 +129,7 @@ class Job(object):
     @honorimmutable
     def Touch(self):
         try:
-            self.conn.touch(self.id)
+            self.conn.touch(self.jid)
         except errors.NotFound:
             return False
         except:
@@ -130,7 +143,7 @@ class Job(object):
             self.pri = newpri
 
         try:
-            self.conn.bury(self.id, newpri)
+            self.conn.bury(self.jid, newpri)
         except errors.NotFound:
             return False
         except:
@@ -141,7 +154,7 @@ class Job(object):
     @property
     def Info(self):
         try:
-            stats=self.conn.stats_job(self.id)
+            stats=self.conn.stats_job(self.jid)
         except:
             raise
         else:
@@ -150,4 +163,3 @@ class Job(object):
 def newJob(**kw):
     kw['from_queue'] = False
     return Job(**kw)
-

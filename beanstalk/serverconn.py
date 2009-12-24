@@ -1,12 +1,17 @@
-import socket, select
+import socket
+import select
 import protohandler
+import logging
 
 _debug = False
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 class ConnectionError(Exception): pass
 
+
 class ServerConn(object):
-    '''ServerConn is a simple, single thread single connection serialized
+    """ServerConn is a simple, single thread single connection serialized
     beanstalk connection.  This class is meant to be used as is, or be the base
     class for more sophisticated connection handling.The methods that are
     intended to be overridden are the ones that begin with _ and __. These
@@ -16,19 +21,40 @@ class ServerConn(object):
     The Proto class returns a function as part of it's handling/conversion of
     the beanstalk protocol. This function is threadsafe and event safe, meant
     to be used as a callback. This should greatly simplify the writing of a
-    twisted or libevent serverconn class'''
+    twisted or libevent serverconn class
 
+    """
     def __init__(self, server, port, job = False):
+        self.poller = getattr(select, 'poll', lambda : None)()
+        self.job = job
         self.server = server
         self.port = port
-        self.job = job
-        self.poller = None
-        if hasattr(select, 'poll'):
-            self.poller = select.poll()
-        self.__makeConn()
 
-    def fileno(self):
-        return self._socket.fileno()
+        self._socket  = None
+        self.__makeConn()
+    
+    def __repr__(self):
+        s = "<[%(active)s]ServerConn(%(ip)s:%(port)s)>"
+        active_ = "Open" if self._socket else "Closed"
+        return s % {"active" : active_, "ip" : self.server, "port" : self.port}
+
+    def __getattribute__(self, attr):
+        logger.debug("Fetching: %s", attr)
+        res = super(ServerConn, self).__getattribute__(attr)
+        logger.debug("Attribute found: %s...", res)
+        if not hasattr(res, "__name__") or not res.__name__.startswith('process_'):
+            return res
+        def caller(*args, **kw):
+            logger.info("Calling %s with: args(%s), kwargs(%s)", 
+                         res.__name__, args, kw)
+            return self._do_interaction(*res(*args, **kw))
+        return caller
+    
+    def __eq__(self, comparable):
+        #for unit testing
+        assert isinstance(comparable, ServerConn)
+        return not any([cmp(self.server, comparable.server),
+                        cmp(self.port, comparable.port)])
 
     def __makeConn(self):
         self._socket = socket.socket()
@@ -55,8 +81,11 @@ class ServerConn(object):
             pcount = 0
             recv = self._socket.recv(handler.remaining)
             if not recv:
-                self._socket.close()
-                raise protohandler.errors.ProtoError("Remote host closed conn")
+                closedmsg = "Remote server %(server)s:%(port)s has "\
+                            "closed connection" % { "server" : server.ip, 
+                                                    "port" : server.port}
+                self.close() 
+                raise protohandler.errors.ProtoError(closedmsg)
             res = handler(recv)
             if res: break
 
@@ -64,17 +93,13 @@ class ServerConn(object):
             res = self.job(conn=self,**res)
         return res
 
-
     def _do_interaction(self, line, handler):
         self.__writeline(line)
         return self._get_response(handler)
 
-    @property
-    def tube(self):
-        return self.list_tube_used()['tube']
-
     def _get_watchlist(self):
         return self.list_tubes_watched()['data']
+
     def _set_watchlist(self, seq):
         if len(seq) == 0:
             seq.append('default')
@@ -88,17 +113,23 @@ class ServerConn(object):
         for x in rem:
             self.ignore(x)
         return
+
     watchlist = property(_get_watchlist, _set_watchlist)
 
-    def __getattribute__(self, attr):
-        res = super(ServerConn, self).__getattribute__(attr)
-        if not hasattr(res, "__name__") or not res.__name__.startswith('process_'):
-            return res
-        def caller(*args, **kw):
-            return self._do_interaction(*res(*args, **kw))
-        return caller
+    @property
+    def tube(self):
+        return self.list_tube_used()['tube']
+    
+    def close(self):
+        self.poller.unregister(self._socket)
+        self._socket.close()
+
+    def fileno(self):
+        return self._socket.fileno()
+
 
 ServerConn = protohandler.protProvider(ServerConn)
+
 
 class ThreadedConn(ServerConn):
     def __init__(self, *args, **kw):
@@ -109,6 +140,7 @@ class ThreadedConn(ServerConn):
     def __del__(self):
         self.__pool.release(self)
         super(ThreadedConn, self).__del__()
+
 
 class ThreadedConnPool(object):
     '''
@@ -143,6 +175,7 @@ class ThreadedConnPool(object):
         self.conns.append(conn)
         self.lock.release()
         self.useme.release()
+
 
 try:
     from _libeventconn import LibeventConn
