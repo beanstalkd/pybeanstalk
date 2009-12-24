@@ -246,8 +246,8 @@ def test_tube_operations():
         expecting = 2
 
     assert newjob_.Server.stats()['data']['current-jobs-ready'] == expecting,\
-            "Was expecting 2, got %s" %\
-                newjob_.Server.stats()['data']['current-jobs-ready']
+            "Was expecting %s, got %s" % (expecting,
+                    newjob_.Server.stats()['data']['current-jobs-ready'])
 
     # because the protocol blocks when we try to reserve a job, theres not a
     # good way to test that it does not return when the watchlist doesn't
@@ -259,13 +259,14 @@ def test_tube_operations():
     job.Return()
 
     conn.watchlist = ['default']
-    job = job_.Server.reserve()
-    assert job['jid'] == dummy_id, 'got wrong job from default'
+    #job from default queue
+    j_from_dq = job_.Server.reserve()
+    assert j_from_dq['jid'] == dummy_id, 'got wrong job from default'
     print 'about to delete'
-    job.Finish()
+    j_from_dq.Finish()
 
     conn.watchlist = testlist
-    j = job_.Server.reserve()
+    j = newjob_.Server.reserve()
     print 'about to delete again'
     j.Finish()
 
@@ -278,15 +279,13 @@ def test_reserve_timeout_works():
     x = conn.reserve_with_timeout(0)
     assert x['state'] == 'timeout'
 
-def _test_reserve_deadline_soon():
+def test_reserve_deadline_soon():
 
     # Put a short running job, do NOT use ttr=1, that is too short
     # Will block indefinitely if there's not enough time to touch the job
     job_ = conn.put('foobarbaz job!', ttr=5)
     jid = job_["jid"]
 
-    print jid
-    print "touching: ", job_.Touch()
     # Reserve it, so we can setup conditions to get a DeadlineSoon error
     res = job_.Server.reserve()
     assert jid == res['jid'], "Didn't get test job, something funky is happening."
