@@ -2,6 +2,7 @@ import socket
 import select
 import random
 import logging
+import asyncore
 
 import protohandler
 from serverconn import ServerConn
@@ -9,6 +10,18 @@ from job import Job
 
 _debug = False
 logger = logging.getLogger(__name__)
+
+class AsyncServerConn(ServerConn):
+    """Similar to the ServerConn object, but uses asyncronous I/O instead of
+    blocking
+
+    """
+    def __init__(self, server, port, job = False):
+        super(AsyncServerConn, self).__init__(sever, port, job)
+
+    def _get_response(self, handler):
+        return
+
 
 #TODO: Confirm that this is thread safe. There's no need to 
 #block here at all
@@ -46,6 +59,15 @@ class ServerPool(object):
         """
         for server in self.servers:
             server.use(*args, **kwargs)
+
+    def ___do_interaction(self, line, handler):
+        #for all servers, send them the line that we're looking
+        #for
+        for server in self.servers:
+            server.io.send(line)
+
+        #start the async loop to listen
+        asyncore.loop()
 
     def _get_watchlist(self):
         """Returns the global watchlist for all servers"""

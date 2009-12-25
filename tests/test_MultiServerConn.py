@@ -281,9 +281,8 @@ def test_reserve_timeout_works():
 
 def test_reserve_deadline_soon():
 
-    # Put a short running job, do NOT use ttr=1, that is too short
-    # Will block indefinitely if there's not enough time to touch the job
-    job_ = conn.put('foobarbaz job!', ttr=5)
+    # Put a short running job
+    job_ = conn.put('foobarbaz job!', ttr=1)
     jid = job_["jid"]
 
     # Reserve it, so we can setup conditions to get a DeadlineSoon error

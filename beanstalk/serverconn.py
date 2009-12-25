@@ -34,9 +34,10 @@ class ServerConn(object):
         self.__makeConn()
 
     def __repr__(self):
-        s = "<[%(active)s]ServerConn(%(ip)s:%(port)s)>"
+        s = "<[%(active)s]%(class)s(%(ip)s:%(port)s)>"
         active_ = "Open" if self._socket else "Closed"
-        return s % {"active" : active_, "ip" : self.server, "port" : self.port}
+        return s % {"class" : self.__class__.__name__,
+                    "active" : active_, "ip" : self.server, "port" : self.port}
 
     def __getattribute__(self, attr):
         logger.debug("Fetching: %s", attr)
