@@ -52,6 +52,7 @@ class Job(object):
         self.imutable = bool(kw.get('imutable', False))
         self._from_queue = bool(kw.get('from_queue', False))
         self.tube = kw.get('tube', 'default')
+        self.ttr = kw.get('ttr', 60)
 
     def __eq__(self, comparable):
         if not isinstance(comparable, Job):
@@ -103,7 +104,7 @@ class Job(object):
         oldtube = self.Server.tube
         if oldtube != self.tube:
             self.Server.use(self.tube)
-        self.Server.put(self._serialize(), self.pri, self.delay)
+        self.Server.put(self._serialize(), self.pri, self.delay, self.ttr)
         if oldtube != self.tube:
             self.Server.use(oldtube)
 
