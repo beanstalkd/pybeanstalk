@@ -3,6 +3,7 @@ import select
 import random
 import logging
 import asyncore
+import threading
 
 import protohandler
 from serverconn import ServerConn
@@ -11,6 +12,8 @@ from job import Job
 _debug = False
 logger = logging.getLogger(__name__)
 
+class ServerIsWaiting(Exception): pass
+
 class AsyncServerConn(ServerConn):
     """Similar to the ServerConn object, but uses asyncronous I/O instead of
     blocking
@@ -18,9 +21,65 @@ class AsyncServerConn(ServerConn):
     """
     def __init__(self, server, port, job = False):
         super(AsyncServerConn, self).__init__(sever, port, job)
+        self.__mutex = threading.Lock()
+        self.__waiting = False
+        self.__operation = None
 
-    def _get_response(self, handler):
-        return
+    def __getattribute__(self, attr):
+        res = super(ServerConn, self).__getattribute__(attr)
+        if not hasattr(res, "__name__") or
+           not res.__name__.startswith('process_'):
+            return res
+
+        def caller(*args, **kw):
+            self.__operation = attr
+            logger.info("[%s]Calling %s with: args(%s), kwargs(%s)",
+                         attr, res.__name__, args, kw)
+            return self._do_interaction(*res(*args, **kw))
+        return caller
+
+    def __repr__(self):
+        return super(AsyncServerConn, self).__repr__()
+
+    def __assert_server_not_waiting(self):
+        if self.__waiting:
+            raise ServerIsWaiting("%s currently waiting on a job!", self)
+
+    def __writeline(self, line):
+        return super(AsyncServerConn, self).__writeline(line)
+
+    def __handle_reserve(self, handler):
+        self.__assert_server_not_waiting()
+        exception_thrown = False
+        try:
+            self.__waiting = True
+            self.poller.select([self._socket])
+        except (IOError, ServerIsWaiting), e:
+            exception_thrown = True
+        finally:
+            self.__waiting = False
+
+        if not exception_thrown:
+            return super(AsyncServerConn, self)._get_response(handler)
+        else:
+            return None
+
+    def _get_response(handler):
+        #we do this here because we want to select on multiple fd instead
+        #of doing a receive on the socket for infinite blocking
+        if self.__operation in ["reserve", "reserve_with_timeout"]:
+            self.__handle_reserve(handler)
+        else:
+            return super(AsyncServerConn, self)._get_response(handler)
+
+    def _do_interaction(self, line, handler):
+        self.__assert_server_not_waiting()
+        self.__mutex.acquire()
+        try:
+            self.__writeline(line)
+            return self._get_response(handler)
+        finally:
+            self.__mutex.release()
 
 
 #TODO: Confirm that this is thread safe. There's no need to 
