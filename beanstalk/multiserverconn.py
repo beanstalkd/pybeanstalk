@@ -11,8 +11,7 @@ from job import Job
 _debug = False
 logger = logging.getLogger(__name__)
 
-class ServerInUse(Exception):
-    pass
+class ServerInUse(Exception): pass
 
 class ServerPool(object):
     """ServerPool is a queue implementation of ServerConns with distributed
@@ -106,64 +105,57 @@ class ServerPool(object):
         def retrier(self, *args, **kwargs):
             while True:
                 try:
-                    func(self, *args, **kwargs)
+                    value = func(self, *args, **kwargs)
                 except ServerInUse, e:
                     pass
                 else:
-                    break
+                    return value
         return retrier
 
     @retry_until_succeeds
     def _all_broadcast(self, cmd, *args, **kwargs):
-        pass
+        dikt = {}
+        for server in self.servers:
+            dikt[server] = getattr(server, cmd)(*args, **kwargs)
+        return dikt
 
     @retry_until_succeeds
     def _rand_broadcast(self, cmd, *args, **kwargs):
         random_server = self.get_random_server()
-        getattr(random_server, cmd)(*args, **kwargs)
+        return getattr(random_server, cmd)(*args, **kwargs)
 
     def _all_broadcast_get_first_response(self, cmd, *args, **kwargs):
         pass
 
     def put(self, *args, **kwargs):
-        random_server = self.get_random_server()
-        random_server.put(*args, **kwargs)
+        return self._rand_broadcast("put", *args, **kwargs)
 
     def reserve(self, *args, **kwargs):
-        random_server = self.get_random_server()
-        random_server.reserve(*args, **kwargs)
+        return self._rand_broadcast("reserve", *args, **kwargs)
 
     def reserve_with_timeout(self, *args, **kwargs):
-        random_server = self.get_random_server()
-        random_server.reserve_with_timeout(*args, **kwargs)
+        return self._rand_broadcast("reserve_with_timeout", *args, **kwargs)
 
     def use(self, *args, **kwargs):
-        for server in self.servers:
-            server.use(*args, **kwargs)
+        return self._all_broadcast("use", *args, **kwargs)
 
     def peek(self, *args, **kwargs):
-        for server in self.servers:
-            server.peek(*args, **kwargs)
+        return self._all_broadcast("peek", *args, **kwargs)
 
     def peek_delayed(self, *args, **kwargs):
-        for server in self.servers:
-            server.peek_delayed(*args, **kwargs)
+        return self._all_broadcast("peek_delayed", *args, **kwargs)
 
     def peek_buried(self, *args, **kwargs):
-        for server in self.servers:
-            server.peek_buried(*args, **kwargs)
+        return self._all_broadcast("peek_buried", *args, **kwargs)
 
     def peek_ready(self, *args, **kwargs):
-        for server in self.servers:
-            server.peek_ready(*args, **kwargs)
+        return self._all_broadcast("peek_ready", *args, **kwargs)
 
     def stats(self, *args, **kwargs):
-        for server in self.servers:
-            server.stats(*args, **kwargs)
+        return self._all_broadcast("stats", *args, **kwargs)
 
     def stats_tube(self, *args, **kwargs):
-        for server in self.servers:
-            server.stats_tube(*args, **kwargs)
+        return self._all_broadcast("stats_tube", *args, **kwargs)
 
     def list_tubes(self, *args, **kwargs):
         for server in self.servers:
@@ -177,3 +169,7 @@ class ServerPool(object):
         for server in self.servers:
             server.list_tubes_watched(*args, **kwargs)
 
+    def close(self):
+        for server in self.servers:
+            server.close()
+        del self.servers[:]

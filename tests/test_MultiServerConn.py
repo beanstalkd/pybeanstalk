@@ -89,7 +89,7 @@ def _test_putter_and_reserver(payload, pri):
     assert job_.Info['data']['state'] == 'ready'
 
     # reserve it
-    res = job_.Server.reserve()
+    res = conn.reserve()
     #reserved here is a Job class
     print "reserved a job", res
 
