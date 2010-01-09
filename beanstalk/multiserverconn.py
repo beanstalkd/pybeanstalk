@@ -3,6 +3,8 @@ import select
 import random
 import logging
 import threading
+import asyncore
+import asynchat
 
 import protohandler
 from serverconn import ServerConn
@@ -12,6 +14,24 @@ _debug = False
 logger = logging.getLogger(__name__)
 
 class ServerInUse(Exception): pass
+
+class AsyncServerConn(object):
+    def handle_read(self):
+        pass
+    def handle_write(self):
+        pass
+    def handle_connect(self):
+        pass
+    def handle_close(self):
+        pass
+    def handle_error(self):
+        pass
+    def handle_accept(self):
+        pass
+    def readable(self):
+        pass
+    def writable(self):
+        pass
 
 class ServerPool(object):
     """ServerPool is a queue implementation of ServerConns with distributed
@@ -119,6 +139,10 @@ class ServerPool(object):
             dikt[server] = getattr(server, cmd)(*args, **kwargs)
         return dikt
 
+    # A timeout value of 0 will cause the server to immediately return either a
+    # response or TIMED_OUT.  A positive value of timeout will limit the amount of
+    # time the client will block on the reserve request until a job becomes
+    # available.
     @retry_until_succeeds
     def _rand_broadcast(self, cmd, *args, **kwargs):
         random_server = self.get_random_server()
@@ -131,7 +155,9 @@ class ServerPool(object):
         return self._rand_broadcast("put", *args, **kwargs)
 
     def reserve(self, *args, **kwargs):
-        return self._rand_broadcast("reserve", *args, **kwargs)
+        #randomly broadcast
+        self._rand_broadcast("reserve", *args, **kwargs)
+        asyncore.loop(map=list(self.servers), use_poll=True)
 
     def reserve_with_timeout(self, *args, **kwargs):
         return self._rand_broadcast("reserve_with_timeout", *args, **kwargs)
