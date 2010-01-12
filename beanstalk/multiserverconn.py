@@ -332,7 +332,7 @@ class ServerPool(object):
         return self._rand_broadcast("put", *args, **kwargs)
 
     def reserve(self, *args, **kwargs):
-        #randomly broadcast
+        #reserve on all the connections
         return self._all_broadcast("reserve", *args, **kwargs)
 
     def reserve_with_timeout(self, *args, **kwargs):
@@ -375,3 +375,7 @@ class ServerPool(object):
         for server in self.servers:
             server.close()
         del self.servers[:]
+
+    def clone(self):
+        return ServerPool(map(lambda s: (s.ip, s.port, s.job), self.servers))
+
