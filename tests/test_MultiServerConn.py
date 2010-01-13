@@ -223,8 +223,11 @@ def test_tube_operations():
     conn.watchlist = testlist
 
     # ordering may not be guaranteed, sets dont care!
-    assert set(job_.Server.watchlist) == set(testlist)
-    assert set(job_.Server.list_tubes_watched()['data']) == set(testlist)
+    assert set(conn.watchlist) == set(testlist)
+    print conn.list_tubes_watched()
+    print conn.stats()
+    print conn.stats()
+    assert set(conn.list_tubes_watched()['data']) == set(testlist)
 
     #use test
     assert job_.Server.tube == 'default'
@@ -232,7 +235,8 @@ def test_tube_operations():
     assert set(job_.Server.watchlist) == set(testlist)
 
     conn.use('bar')
-    assert conn.tube == 'bar'
+    print conn.tubes
+    assert conn.tubes == 'bar'
 
     newjob_ = conn.put('this is data', pri=100)
     jid = newjob_['jid']

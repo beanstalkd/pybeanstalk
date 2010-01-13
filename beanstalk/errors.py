@@ -5,6 +5,8 @@ class BeanStalkError(Exception): pass
 class ProtoError(BeanStalkError): pass
 class ServerError(BeanStalkError): pass
 
+class NotConnected(BeanStalkError): pass
+
 class OutOfMemory(ServerError): pass
 class InternalError(ServerError): pass
 class Draining(ServerError): pass

@@ -5,6 +5,7 @@ import logging
 import threading
 import asyncore
 import asynchat
+import errno
 
 import protohandler
 from serverconn import ServerConn
@@ -73,8 +74,8 @@ class AsyncServerConn(object):
             recv = self._socket.recv(handler.remaining)
             if not recv:
                 closedmsg = "Remote server %(server)s:%(port)s has "\
-                            "closed connection" % { "server" : server.ip,
-                                                    "port" : server.port}
+                            "closed connection" % { "server" : self.server,
+                                                    "port" : self.port}
                 self.close()
                 raise protohandler.errors.ProtoError(closedmsg)
             res = handler(recv)
@@ -170,16 +171,16 @@ class ServerPool(object):
 
     """
     def __init__(self, serverlist):
-        #build servers into the self.servers list
+        # build servers into the self.servers list
         self.servers = []
         for ip, port, job in serverlist:
             self.add_server(ip, port, job)
 
     def _get_watchlist(self):
         """Returns the global watchlist for all servers"""
-        #TODO: it's late and I'm getting tired, going to just make
-        #a list for now and see maybe later if I want to do a dict
-        #with the server IPs as the keys as well as their watchlist..
+        # TODO: it's late and I'm getting tired, going to just make
+        # a list for now and see maybe later if I want to do a dict
+        # with the server IPs as the keys as well as their watchlist..
         L = []
         for server in self.servers:
             L.extend(server.watchlist)
@@ -200,10 +201,25 @@ class ServerPool(object):
             return cmp(server.server, ip) and matching_port
         return comparison
 
+    def close(self):
+        for server in self.servers:
+            server.close()
+        del self.servers[:]
+
+    def clone(self):
+        return ServerPool(map(lambda s: (s.ip, s.port, s.job), self.servers))
+
     def get_random_server(self):
         #random seed by local time
         random.seed()
-        return random.choice(self.servers)
+        try:
+            choice = random.choice(self.servers)
+        except IndexError, e:
+            # implicitly convert IndexError to BeanStalkError
+            NotConnected = protohandler.errors.NotConnected
+            raise NotConnected("Not connected to a server!")
+        else:
+            return choice
 
     def remove_server(self, ip, port=None):
         """Removes the server from the server list and returns True on success.
@@ -228,14 +244,14 @@ class ServerPool(object):
 
         """
         target = filter(self._server_cmp(ip, port), self.servers)
-        #if we got a server back
+        # if we got a server back
         if not target:
             server = AsyncServerConn(ip, port, job)
             server.pool_instance = self
             server.connect()
             self.servers.append(server)
 
-        #return teh opposite of target
+        # return the opposite of target
         return not bool(target)
 
     def multi_interact(self, line, handler):
@@ -245,49 +261,61 @@ class ServerPool(object):
             try:
                 server.interact(line)
             except ServerInUse, e:
-                #continue and ignore
+                # continue and ignore
                 print e
             else:
-                #successfully wrote to this server, so append to server list
+                print "Successfully sent: ", line, " to ", server
+                # successfully wrote to this server, so append to server list
                 serverlist.append(server)
 
+        # if we didn't append anything into serverlist...
+        if not serverlist:
+            # it means that we couldn't write anything to a server for various
+            # reasons, so 
+            return []
+
+        # at this point, we have servers that we've written to
         try:
             return self.__handle_responses(serverlist, handler)
         finally:
+            # just clear out the serverlist
             del serverlist[:]
 
     def __handle_responses(self, serverlist, handler):
 
-        if not serverlist:
-            print "No server was free..."
-            return None
-
+        # mark every server in the serverlist as waiting
         for server in serverlist:
             server.waiting = True
 
         try:
+            # select on all our servers
+            # remember, select just needs something that returns a valid fd for
+            # fileno()
             responses = select.select(serverlist, [], [])
         except IOError, e:
-            print e, dir(e)
-            if e != 4:
+            # check for an interrupted system call
+            # if we're not interrupted, then re-raise the exception
+            if e[0] != errno.EINTR:
                 raise
 
         print responses
-
         results = []
-        #get all servers who are ready to be READ from
+        # get all servers who are ready to be READ from
         for server in responses[0]:
+            # acquire the mutex
+            # TODO move this block of code into the server class
             server._mutex.acquire()
             try:
                 while True:
                     recv = server._socket.recv(handler.remaining)
                     if not recv:
                         closedmsg = "Remote server %(server)s:%(port)s has "\
-                                    "closed connection" % { "server" : server.ip,
-                                                        "port" : server.port}
+                                    "closed connection"
+                        closedmsg = closedmsg % { "server" : server.server,
+                                                  "port" : server.port}
 
-                        self.remove_server(server.ip, server.port)
-                        print closedmsg
+                        self.remove_server(server.server, server.port)
+                        raise protohandler.errors.NotConnected(closedmsg)
                     res = handler(recv)
                     if res: break
 
@@ -311,28 +339,60 @@ class ServerPool(object):
                     value = func(self, *args, **kwargs)
                 except ServerInUse, e:
                     print e
+                except protohandler.errors.Draining, e:
+                    # ignore
+                    pass
+                except protohandler.errors.NotConnected, e:
+                    # not connected..
+                    for server in self.servers:
+                        server.connect()
                 else:
                     return value
         return retrier
 
     @retry_until_succeeds
     def _all_broadcast(self, cmd, *args, **kwargs):
+        """Broadcast to all servers and return the results in a compacted
+        dictionary, where the keys are the server objects and the values are
+        the result of the command.
+
+        """
         func = getattr(protohandler, "process_%s" % cmd)
         return self.multi_interact(*func(*args, **kwargs))
 
     @retry_until_succeeds
     def _rand_broadcast(self, cmd, *args, **kwargs):
+        """Randomly select a server from the pool of servers and broadcast
+        the desired command.
+
+        Retries if various error connections are encountered.
+        """
         random_server = self.get_random_server()
         return getattr(random_server, cmd)(*args, **kwargs)
 
-    def _all_broadcast_get_first_response(self, cmd, *args, **kwargs):
-        pass
+    @retry_until_succeeds
+    def _first_broadcast_response(self, cmd, *args, **kwargs):
+        """Broadcast to all servers and return the first valid server
+        response.
+
+        If no responses are found, return an empty list.
+
+        This implementation actually just returns ONE response..
+
+        """
+        # TODO Fix this..
+        result = self._all_broadcast(cmd, *args, **kwargs)
+        if result:
+            if isinstance(result, list):
+                result = result[0]
+            return result
+
+        return []
 
     def put(self, *args, **kwargs):
         return self._rand_broadcast("put", *args, **kwargs)
 
     def reserve(self, *args, **kwargs):
-        #reserve on all the connections
         return self._all_broadcast("reserve", *args, **kwargs)
 
     def reserve_with_timeout(self, *args, **kwargs):
@@ -345,37 +405,65 @@ class ServerPool(object):
         return self._all_broadcast("peek", *args, **kwargs)
 
     def peek_delayed(self, *args, **kwargs):
-        return self._all_broadcast("peek_delayed", *args, **kwargs)
+        return self._first_broadcast_response("peek_delayed", *args, **kwargs)
 
     def peek_buried(self, *args, **kwargs):
-        return self._all_broadcast("peek_buried", *args, **kwargs)
+        return self._first_broadcast_response("peek_buried", *args, **kwargs)
 
     def peek_ready(self, *args, **kwargs):
-        return self._all_broadcast("peek_ready", *args, **kwargs)
+        return self._first_broadcast_response("peek_ready", *args, **kwargs)
 
+    def combine_stats(func):
+        def combiner(self, *args, **kwargs):
+            appendables = ['name', 'version', 'pid']
+            results = func(self, *args, **kwargs)
+            # need to combine these results
+            return results
+        return combiner
+
+    @combine_stats
     def stats(self, *args, **kwargs):
         return self._all_broadcast("stats", *args, **kwargs)
 
+    @combine_stats
     def stats_tube(self, *args, **kwargs):
         return self._all_broadcast("stats_tube", *args, **kwargs)
 
+    @retry_until_succeeds
+    def apply_and_compact(func):
+        """Applies func's func.__name__ to all servers in the server pool
+        and tallies results into a dictionary.
+
+        Returns a dictionary of all results tallied into one.
+
+        """
+        def generic_applier(self, *args, **kwargs):
+            cmd = func.__name__
+            results = {}
+            for server in self.servers:
+                results[server] = getattr(server, cmd)(*args, **kwargs)
+            return results
+        return generic_applier
+
+    @apply_and_compact
     def list_tubes(self, *args, **kwargs):
-        for server in self.servers:
-            server.list_tubes(*args, **kwargs)
+        # instead of having to repeating myself by writing an iteration of
+        # all servers to execute and store results in a hash, the decorator 
+        # apply_and_compact will apply the function name (e.g. list_tubes)
+        # to all servers and compact/tally them all into a dictionary
+        #
+        # we don't use multi_interact here because we don't need to handle
+        # a response explicitly
+        pass
 
-    def list_tubes_used(self, *args, **kwargs):
-        for server in self.servers:
-            server.list_tubes_used(*args, **kwargs)
+    @apply_and_compact
+    def list_tube_used(self, *args, **kwargs):
+        pass
 
+    @apply_and_compact
     def list_tubes_watched(self, *args, **kwargs):
-        for server in self.servers:
-            server.list_tubes_watched(*args, **kwargs)
+        pass
 
-    def close(self):
-        for server in self.servers:
-            server.close()
-        del self.servers[:]
-
-    def clone(self):
-        return ServerPool(map(lambda s: (s.ip, s.port, s.job), self.servers))
-
+    @property
+    def tubes(self):
+        return self.list_tube_used()['tube']

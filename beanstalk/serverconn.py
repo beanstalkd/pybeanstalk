@@ -52,7 +52,7 @@ class ServerConn(object):
         return caller
 
     def __eq__(self, comparable):
-        #for unit testing
+        # for unit testing
         assert isinstance(comparable, ServerConn)
         return not any([cmp(self.server, comparable.server),
                         cmp(self.port, comparable.port)])
