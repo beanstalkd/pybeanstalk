@@ -120,6 +120,15 @@ class Handler(object):
         h.next()
         self.__h = h.send
 
+    def clone(self):
+        """Clone the handler
+
+        This method is primarily used in the distributed client to pass fresh
+        generators to handle incoming data buffers.
+
+        """
+        return Handler(*self.lookup.values())
+
     def __call__(self, val):
         return self.__h(val)
 
