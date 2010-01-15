@@ -46,19 +46,24 @@ class AsyncServerConn(object, asyncore.dispatcher):
         asyncore.dispatcher.__init__(self)
 
     def __repr__(self):
-        s = "<[%(active)s][%(waiting)s]%(class)s(%(ip)s:%(port)s)>"
+        s = "<0x%(id)s %(object)s>"
+        return s % {'id' : id(self), 'object' : self }
+
+    def __str__(self):
+        s = "%(class)s(%(ip)s:%(port)s#[%(active)s][%(waiting)s])"
         active_ = "Open" if self._socket else "Closed"
+        waiting_ = "Waiting" if self.__waiting else "NotWaiting"
         return s % {"class" : self.__class__.__name__,
                     "active" : active_,
                     "ip" : self.server,
                     "port" : self.port,
-                    "waiting" : self.__waiting}
+                    "waiting" : waiting_}
 
     def __getattribute__(self, attr):
         res = getattr(protohandler, 'process_%s' % attr, None)
         if res:
             def caller(*args, **kw):
-                logger.info("Calling %s on %s with args(%s), kwargs(%s)",
+                logger.info("Calling %s on %r with args(%s), kwargs(%s)",
                              res.__name__, self, args, kw)
 
                 func = self._do_interaction
@@ -173,11 +178,21 @@ class AsyncServerConn(object, asyncore.dispatcher):
     def tube(self):
         return self.list_tube_used()['tube']
 
+    def post_connection(func):
+        def handle_post_connect(self, *args, **kwargs):
+            value = func(self, *args, **kwargs)
+            protohandler.MAX_JOB_SIZE = self.stats()['data']['max-job-size']
+            return value
+        return handle_post_connect
+
+    @post_connection
     def connect(self):
+        # else the socket is not open at all
+        # so, open the socket, and add it to the dispatcher
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.set_socket(self._socket) # set socket to asyncore.dispatcher
+        self.set_reuse_addr() # try to re-use the address
         self._socket.connect((self.server, self.port))
-        protohandler.MAX_JOB_SIZE = self.stats()['data']['max-job-size']
 
     def interact(self, line):
         self.__assert_not_waiting()
@@ -188,6 +203,11 @@ class AsyncServerConn(object, asyncore.dispatcher):
 
     def close(self):
         self._socket.close()
+        self.del_channel()
+        # very important in python to set to None
+        # if socket is not set to None, then it will try to re-use the same
+        # file descriptor...
+        self._socket = None
 
     def fileno(self):
         return self._socket.fileno()
@@ -214,7 +234,7 @@ class AsyncServerConn(object, asyncore.dispatcher):
         logger.info("Connected to: %s", self)
 
     def handle_close(self):
-        logger.info("Handling Close...")
+        logger.info("Closing connection to: %s", self)
 
     def handle_error(self):
         # get exception information

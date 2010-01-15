@@ -63,6 +63,23 @@ def teardown():
         print output % {"pid" : process.pid}
         process.kill()
 
+def _clean_up():
+    """Cleans up from previous test by closing whatever connection was waiting
+    and primes the connection for the next test
+
+    - Resets the waiting flag
+    - Disconnects and reconnects to the beanstalk queue server to clean out
+      any pending requests.
+
+    """
+    for server in itertools.ifilter(lambda s: s.waiting, conn.servers):
+        server.waiting = False
+        server.close()
+        server.connect()
+
+    for server in conn.servers:
+        assert not server.waiting
+
 
 # Test helpers:
 def _test_putter_and_reserver(payload, pri):
@@ -78,11 +95,8 @@ def _test_putter_and_reserver(payload, pri):
     # TODO: for sanity though, we should query all servers to check they're
     # empty.
 
-    # test clone here
-    cloned_conn = conn.clone()
-
     # create a job
-    job_ = cloned_conn.put(payload, pri)
+    job_ = conn.put(payload, pri)
     put_id = job_['jid']
 
     print "created a job with id", put_id
@@ -91,19 +105,19 @@ def _test_putter_and_reserver(payload, pri):
     assert job_.Info['data']['state'] == 'ready'
 
     # reserve it
-    res = cloned_conn.reserve()[0]
+    res = conn.reserve()[0]
     # reserved here is a Job class
     print "reserved a job", res
 
     assert res['data'] == payload
     assert res['jid'] == put_id
 
-    return (cloned_conn, job_, res)
+    return (job_, res)
 
 
 def _test_put_reserve_delete_a_job(payload, pri):
 
-    cloned_conn, job_, res = _test_putter_and_reserver(payload, pri)
+    job_, res = _test_putter_and_reserver(payload, pri)
     jstats = res.Info['data']
 
     assert jstats['pri'] == pri
@@ -115,14 +129,14 @@ def _test_put_reserve_delete_a_job(payload, pri):
 
     assert job_.Server.stats()['data']['current-jobs-ready'] == 0,\
             "job was not deleted"
-    nose.tools.assert_raises(errors.NotFound, res.Server.stats_job, res['jid'])
 
-    cloned_conn.close()
+    nose.tools.assert_raises(errors.NotFound, res.Server.stats_job, res['jid'])
+    _clean_up()
 
 
 def _test_put_reserve_release_a_job(payload, pri):
 
-    cloned_conn, job_, res = _test_putter_and_reserver(payload, pri)
+    job_, res = _test_putter_and_reserver(payload, pri)
     put_id = job_["jid"]
 
     # release it
@@ -131,7 +145,7 @@ def _test_put_reserve_release_a_job(payload, pri):
     assert job_.Info['data']['state'] == 'ready'
 
     # reserve again
-    res = cloned_conn.reserve()[0]
+    res = conn.reserve()[0]
     print "reserved a job", res
 
     assert res['data'] == payload
@@ -140,7 +154,8 @@ def _test_put_reserve_release_a_job(payload, pri):
     # delete it
     res.Finish()
     assert job_.Server.stats()['data']['current-jobs-ready'] == 0, "job was not deleted"
-    cloned_conn.close()
+    _clean_up()
+
 
 
 # Test Cases:
@@ -162,6 +177,8 @@ def test_remove_server():
 
     # restore server..
     assert conn.add_server(H[0], P, J)
+
+    _clean_up()
 
 def test_ServerConn_can_put_reserve_delete_a_simple_job():
     _test_put_reserve_delete_a_job('abcdef', 0)
@@ -219,6 +236,7 @@ def test_ServerConn_can_bury_and_kick_a_job():
     delete = res.Finish()
 
     assert job_.Server.stats()['data']['current-jobs-ready'] == 0, "job was not deleted"
+    _clean_up()
 
 
 def test_ServerConn_fails_to_connect_with_a_reasonable_exception():
@@ -239,23 +257,21 @@ def test_tube_operations():
     # it will check all servers
 
     # test clone here
-    cloned_conn = conn.clone()
-
-    assert cloned_conn.watchlist == ['default']
+    assert conn.watchlist == ['default']
 
     # a dummy job for when we test a different tube...
-    job_ = cloned_conn.put('dummy')
+    job_ = conn.put('dummy')
     dummy_id = job_['jid']
 
     testlist = ['foo','bar','baz']
-    cloned_conn.watchlist = testlist
+    conn.watchlist = testlist
 
     # ordering may not be guaranteed, sets dont care!
-    assert set(cloned_conn.watchlist) == set(testlist)
+    assert set(conn.watchlist) == set(testlist)
 
     # changes a bit since you're distributed..
     # returns a dict
-    tubes = cloned_conn.list_tubes_watched()
+    tubes = conn.list_tubes_watched()
     for server, tubes_watched in tubes.iteritems():
         # might as well assert that the server shoulnd't be waiting
         assert not server.waiting
@@ -263,20 +279,20 @@ def test_tube_operations():
         assert set(tubes_watched['data']) == set(testlist)
 
     #use test
-    assert set(cloned_conn.tubes) == set(['default'])
+    assert set(conn.tubes) == set(['default'])
 
-    cloned_conn.use('bar')
-    assert set(cloned_conn.tubes) == set(['bar'])
+    conn.use('bar')
+    assert set(conn.tubes) == set(['bar'])
 
-    newjob_ = cloned_conn.put('this is data', pri=100)
+    newjob_ = conn.put('this is data', pri=100)
     jid = newjob_['jid']
     assert newjob_.Server.stats_tube('bar')['data']['current-jobs-ready'] == 1
 
     #because we're randomly choosing between servers, we shouldn't expect that
     #the current-jobs-ready will be the same, since they're on distributed
     #nodes
-    print cloned_conn.stats()
-    assert cloned_conn.stats()['data']['current-jobs-ready'] == 2,\
+    print conn.stats()
+    assert conn.stats()['data']['current-jobs-ready'] == 2,\
             "Was expecting %s, got %s" % (expecting,
                     newjob_.Server.stats()['data']['current-jobs-ready'])
 
@@ -289,19 +305,19 @@ def test_tube_operations():
     assert job['jid'] == jid, 'got wrong job from tube bar'
     job.Return()
 
-    cloned_conn.watchlist = ['default']
+    conn.watchlist = ['default']
     #job from default queue
     j_from_dq = job_.Server.reserve()
     assert j_from_dq['jid'] == dummy_id, 'got wrong job from default'
     print 'about to delete'
     j_from_dq.Finish()
 
-    cloned_conn.watchlist = testlist
+    conn.watchlist = testlist
     j = newjob_.Server.reserve()
     print 'about to delete again'
     j.Finish()
+    _clean_up()
 
-    cloned_conn.close()
 
 def test_reserve_timeout_works():
     assert conn.stats()['data']['current-jobs-ready'] == 0, "The server is not empty "\
@@ -312,23 +328,24 @@ def test_reserve_timeout_works():
     results = conn.reserve_with_timeout(0)
     for server in results:
         assert server['state'] == 'timeout'
+    _clean_up()
 
 def test_reserve_deadline_soon():
 
     # Put a short running job
-    cloned_conn = conn.clone()
-
-    job_ = cloned_conn.put('foobarbaz job!', ttr=2)
+    job_ = conn.put('foobarbaz job!', ttr=2)
     jid = job_["jid"]
 
     # Reserve it, so we can setup conditions to get a DeadlineSoon error
-    res = cloned_conn.reserve()[0]
+    res = conn.reserve()[0]
     assert jid == res['jid'], "Didn't get test job, something funky is happening."
     # a bit of padding to make sure that deadline soon is encountered
     time.sleep(1)
-    assert_raises(errors.DeadlineSoon, cloned_conn.reserve), "Job should have warned "\
+    assert_raises(errors.DeadlineSoon, conn.reserve), "Job should have warned "\
                   "of impending deadline. It did not. This is a problem!"
 
     job_.Finish()
     x = job_.Server.stats()
     assert x['state'] == 'ok', "Didn't delete the job right. This could break future tests"
+    _clean_up()
+
