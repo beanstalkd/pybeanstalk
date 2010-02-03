@@ -30,13 +30,15 @@ my code...
 """
 
 
-import yaml
 import StringIO
 import re
 from itertools import izip, imap
 from functools import wraps
-from errors import checkError
+
+import yaml
+
 import errors
+from errors import checkError
 
 # default value on server
 MAX_JOB_SIZE = (2**16) - 1
@@ -117,6 +119,15 @@ class Handler(object):
         h = self.handler()
         h.next()
         self.__h = h.send
+
+    def clone(self):
+        """Clone the handler
+
+        This method is primarily used in the distributed client to pass fresh
+        generators to handle incoming data buffers.
+
+        """
+        return Handler(*self.lookup.values())
 
     def __call__(self, val):
         return self.__h(val)

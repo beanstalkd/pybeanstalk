@@ -1,5 +1,9 @@
+import StringIO
+from pprint import pformat
 from functools import wraps
+
 import yaml
+
 import errors
 
 DEFAULT_CONN = None
@@ -33,38 +37,62 @@ class Job(object):
     management on the consumer end.
     '''
 
-    def __init__(self, conn = None, jid=0, pri=0, data='', state = 'ok',**kw):
-        if not conn and not DEFAULT_CONN:
+    def __init__(self, conn = None, jid=0, pri=0, data='', state = 'ok', **kw):
+
+        if not any([conn, DEFAULT_CONN]):
             raise AttributeError("No connection specified")
-        elif not conn:
-            self._conn = DEFAULT_CONN
-        else:
-            self.conn = conn
-        self.id = jid
-        self.priority = pri
+
+        self._conn = conn if conn else DEFAULT_CONN
+        self.jid = jid
+        self.pri = pri
         self.delay = 0
         self.state = state
-        if data:
-            self._unserialize(data)
-        else:
-            self.data = ''
+        self.data = data if data else ''
 
         self.imutable = bool(kw.get('imutable', False))
         self._from_queue = bool(kw.get('from_queue', False))
         self.tube = kw.get('tube', 'default')
         self.ttr = kw.get('ttr', 60)
 
+    def __eq__(self, comparable):
+        if not isinstance(comparable, Job):
+            return False
+        return not all([cmp(self.Server, comparable.Server),
+                        cmp(self.jid, comparable.jid),
+                        cmp(self.state, comparable.state),
+                        cmp(self.data, comparable.data)])
+
     def __del__(self):
         self.Finish()
 
     def __str__(self):
-        return self._serialize()
+        return pformat(self._serialize())
+
+    def __getitem__(self, key):
+        #validate key for TypeError
+        #TODO: make elegant
+        validkey = isinstance(key, basestring)
+        if not validkey:
+            raise TypeError, "Invalid subscript type: %s" % type(key)
+        #return KeyError
+        try:
+            value = getattr(self, key)
+        except AttributeError, e:
+            raise KeyError, e
+        else:
+            return value
 
     def _unserialize(self, data):
-        self.data = yaml.load(data)
+        self.data = yaml.dump(data)
 
     def _serialize(self):
-        return yaml.dump(self.data)
+        handler = StringIO.StringIO({
+            'data' : self.data,
+            'jid' : self.jid,
+            'state' : self.state,
+            'conn' : str(self.Server)
+        })
+        return yaml.load(handler)
 
     def run(self):
         raise NotImplemented('The Job.run method must be implemented in a subclass')
@@ -73,18 +101,17 @@ class Job(object):
         if self._from_queue:
             self.Delay(self.delay)
             return
-        oldtube = self.conn.tube
+        oldtube = self.Server.tube
         if oldtube != self.tube:
-            self.conn.use(self.tube)
-        self.conn.put(self._serialize(), self.priority, self.delay, self.ttr)
+            self.Server.use(self.tube)
+        self.Server.put(self._serialize(), self.pri, self.delay, self.ttr)
         if oldtube != self.tube:
-            self.conn.use(oldtube)
-
+            self.Server.use(oldtube)
 
     @honorimmutable
     def Return(self):
         try:
-            self.conn.release(self.id, self.priority, 0)
+            self.Server.release(self.jid, self.pri, 0)
         except errors.NotFound:
             return False
         except:
@@ -95,7 +122,7 @@ class Job(object):
     @honorimmutable
     def Delay(self, delay):
         try:
-            self.conn.release(self.id, self.priority, delay)
+            self.Server.release(self.jid, self.pri, delay)
         except errors.NotFound:
             return False
         except:
@@ -106,7 +133,7 @@ class Job(object):
     @honorimmutable
     def Finish(self):
         try:
-            self.conn.delete(self.id)
+            self.Server.delete(self.jid)
         except errors.NotFound:
             return False
         except:
@@ -117,7 +144,7 @@ class Job(object):
     @honorimmutable
     def Touch(self):
         try:
-            self.conn.touch(self.id)
+            self.Server.touch(self.jid)
         except errors.NotFound:
             return False
         except:
@@ -131,7 +158,7 @@ class Job(object):
             self.pri = newpri
 
         try:
-            self.conn.bury(self.id, newpri)
+            self.Server.bury(self.jid, newpri)
         except errors.NotFound:
             return False
         except:
@@ -142,13 +169,16 @@ class Job(object):
     @property
     def Info(self):
         try:
-            stats=self.conn.stats_job(self.id)
+            stats = self.Server.stats_job(self.jid)
         except:
             raise
         else:
             return stats
 
+    @property
+    def Server(self):
+        return self._conn
+
 def newJob(**kw):
     kw['from_queue'] = False
     return Job(**kw)
-

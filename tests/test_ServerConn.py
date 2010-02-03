@@ -18,9 +18,9 @@ import nose
 
 from beanstalk import serverconn
 from beanstalk import errors
-import config
+from config import get_config
 
-
+config = get_config("ServerConn")
 
 # created during setup
 server_pid = None
@@ -28,16 +28,16 @@ conn = None
 
 
 def setup():
-    global server_pid, conn
+    global server_pid, conn, config
     server_pid = os.spawnl(os.P_NOWAIT,
                             os.path.join(config.BPATH,config.BEANSTALKD),
                             os.path.join(config.BPATH,config.BEANSTALKD),
                             '-l', config.BEANSTALKD_HOST,
-                            '-p', str(config.BEANSTALKD_PORT)
+                            '-p', config.BEANSTALKD_PORT
                             )
     print "server started at process", server_pid
     time.sleep(0.1)
-    conn = serverconn.ServerConn(config.BEANSTALKD_HOST, config.BEANSTALKD_PORT)
+    conn = serverconn.ServerConn(config.BEANSTALKD_HOST, int(config.BEANSTALKD_PORT))
 
 def teardown():
     print "terminating beanstalkd at", server_pid
@@ -164,7 +164,7 @@ def test_ServerConn_fails_to_connect_with_a_reasonable_exception():
     # it may be nicer not to throw a socket error here?
     try:
         serverconn.ServerConn(config.BEANSTALKD_HOST,
-                              config.BEANSTALKD_PORT+1)
+                              int(config.BEANSTALKD_PORT)+1)
     except socket.error, reason:
         pass
 
