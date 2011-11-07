@@ -1,5 +1,4 @@
 import socket, sys
-from collections import dequeue
 import protohandler
 
 class Command(object):
