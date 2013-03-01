@@ -1,7 +1,8 @@
 from twisted.protocols import basic
-from twisted.internet import defer, protocol
+from twisted.internet import interfaces, defer, protocol
 from twisted.python import log
 import protohandler
+from zope.interface import implementer
 
 # Stolen from memcached protocol
 try:
@@ -58,6 +59,7 @@ class Command(object):
         """
         self._deferred.errback(error)
 
+@implementer(interfaces.IProtocol, interfaces.ILoggingContext)
 class Beanstalk(basic.LineReceiver):
 
     def __init__(self):
