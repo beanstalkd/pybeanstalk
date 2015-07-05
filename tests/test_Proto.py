@@ -212,3 +212,5 @@ def test_put_extra():
     protohandler.MAX_JOB_SIZE = oldmax
 
 
+def test_tube_name():
+    assert(protohandler._namematch.match("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-+/;.$_()"))

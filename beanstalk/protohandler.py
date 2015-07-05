@@ -215,7 +215,7 @@ def interaction(*responses):
         return newfunc
     return deco
 
-_namematch = re.compile(r'^[a-zA-Z0-9+\(\);.$][a-zA-Z0-9+\(\);.$-]{0,199}$')
+_namematch = re.compile(r'^[a-zA-Z0-9+\(\)/;.$_][a-zA-Z0-9+\(\)/;.$_-]{0,199}$')
 def check_name(name):
     '''used to check the validity of a tube name'''
     if not _namematch.match(name):
