@@ -75,7 +75,11 @@ class Beanstalk(basic.LineReceiver):
         def caller(*args, **kw):
             return self.__cmd(attr,
                 *getattr(protohandler, 'process_%s' % attr)(*args, **kw))
-        return caller
+
+        if hasattr(protohandler, "process_"+attr):
+           return caller
+        else:
+           raise AttributeError(attr)
 
     def __cmd(self, command, full_command, handler):
         # Note here: the protohandler already inserts the \r\n, so
