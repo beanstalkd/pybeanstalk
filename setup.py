@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from distutils.core import setup
+from setuptools import setup, find_packages
 
 description_long = '''
 A client library for beanstalkd. beanstalkd is a lightweight queuing daemon
@@ -18,9 +18,9 @@ setup(name='pybeanstalk',
       long_description = description_long,
       author='Erich Heine',
       author_email='sophacles@gmail.com',
-      url='http://code.google.com/p/pybeanstalk',
+      url='https://github.com/beanstalkd/pybeanstalk',
       classifiers=[
-        'Development Status :: 3 - Alpha',
+        'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',
         'License :: OSI Approved :: BSD License',
         'License :: OSI Approved :: GNU General Public License (GPL)',
@@ -34,6 +34,7 @@ setup(name='pybeanstalk',
         'Topic :: Software Development :: Libraries',
         'Topic :: Software Development :: Object Brokering',
         'Topic :: System'],
-      packages=['beanstalk']
+      packages=['beanstalk'],
+      extras_require={'twisted': ["Twisted>=15.2.1"]}
 )
 
