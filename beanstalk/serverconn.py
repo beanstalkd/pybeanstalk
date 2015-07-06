@@ -83,8 +83,8 @@ class ServerConn(object):
             recv = self._socket.recv(handler.remaining)
             if not recv:
                 closedmsg = "Remote server %(server)s:%(port)s has "\
-                            "closed connection" % { "server" : server.ip,
-                                                    "port" : server.port}
+                            "closed connection" % { "server" : self.server.ip,
+                                                    "port" : self.server.port}
                 self.close()
                 raise protohandler.errors.ProtoError(closedmsg)
             res = handler(recv)
