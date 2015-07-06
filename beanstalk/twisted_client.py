@@ -1,6 +1,6 @@
 from twisted.protocols import basic
 from twisted.internet import defer, protocol
-from twisted.python import log
+from twisted.logger import Logger
 import protohandler
 
 # Stolen from memcached protocol
@@ -12,6 +12,7 @@ except ImportError:
             return self.pop(0)
         def appendleft(self, item):
             self.insert(0, item)
+
 
 class Command(object):
     """
@@ -58,7 +59,10 @@ class Command(object):
         """
         self._deferred.errback(error)
 
+
 class Beanstalk(basic.LineReceiver):
+
+    logger = Logger()
 
     def __init__(self):
         self._current = deque()
@@ -121,16 +125,20 @@ class Beanstalk(basic.LineReceiver):
         else:
             self._current.appendleft(pending)
 
+
 class BeanstalkClientFactory(protocol.ClientFactory):
+
+    logger = Logger()
+
     def startedConnecting(self, connector):
-        print 'Started to connect.'
+        self.logger.debug("{msg}", msg="Started to connect.")
 
     def buildProtocol(self, addr):
-        print 'Connected.'
+        self.logger.debug("{msg}", msg="Connected.")
         return Beanstalk()
 
     def clientConnectionLost(self, connector, reason):
-        print 'Lost connection.  Reason:', reason
+        self.logger.debug("{msg}", msg="Lost connection, reason: " % reason)
 
     def clientConnectionFailed(self, connector, reason):
-        print 'Connection failed. Reason:', reason
+        self.logger.debug("{msg}", msg="Connection failed, reason: " % reason)
