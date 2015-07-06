@@ -1,6 +1,6 @@
 from twisted.protocols import basic
 from twisted.internet import defer, protocol
-from twisted.logger import Logger
+from twisted.python import log
 import protohandler
 
 # Stolen from memcached protocol
@@ -12,7 +12,6 @@ except ImportError:
             return self.pop(0)
         def appendleft(self, item):
             self.insert(0, item)
-
 
 class Command(object):
     """
@@ -59,10 +58,7 @@ class Command(object):
         """
         self._deferred.errback(error)
 
-
 class Beanstalk(basic.LineReceiver):
-
-    logger = Logger()
 
     def __init__(self):
         self._current = deque()
@@ -75,11 +71,7 @@ class Beanstalk(basic.LineReceiver):
         def caller(*args, **kw):
             return self.__cmd(attr,
                 *getattr(protohandler, 'process_%s' % attr)(*args, **kw))
-
-        if hasattr(protohandler, "process_"+attr):
-           return caller
-        else:
-           raise AttributeError(attr)
+        return caller
 
     def __cmd(self, command, full_command, handler):
         # Note here: the protohandler already inserts the \r\n, so
@@ -129,20 +121,16 @@ class Beanstalk(basic.LineReceiver):
         else:
             self._current.appendleft(pending)
 
-
 class BeanstalkClientFactory(protocol.ClientFactory):
-
-    logger = Logger()
-
     def startedConnecting(self, connector):
-        self.logger.debug("{msg}", msg="Started to connect.")
+        print 'Started to connect.'
 
     def buildProtocol(self, addr):
-        self.logger.debug("{msg}", msg="Connected.")
+        print 'Connected.'
         return Beanstalk()
 
     def clientConnectionLost(self, connector, reason):
-        self.logger.debug("{msg}", msg="Lost connection, reason: " % reason)
+        print 'Lost connection.  Reason:', reason
 
     def clientConnectionFailed(self, connector, reason):
-        self.logger.debug("{msg}", msg="Connection failed, reason: " % reason)
+        print 'Connection failed. Reason:', reason
