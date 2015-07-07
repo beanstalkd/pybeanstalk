@@ -7,14 +7,17 @@ inspiration from memcache. More details on beanstalk can be found at:
 http://xph.us/software/beanstalkd/
 
 This client library aims to be simple and extensible. It currently provides
-nothing more than an interface to the protocol over a socktet, or e.g.
+nothing more than an interface to the protocol over a socket, or e.g.
 thread-wrangling
 
 To install, just run python setup.py install from this directory.
   * NOTE to python developers: this has been tested to play nice with virtualenv
 
+Please see the examples directory for usage examples.
+
 The package home is at https://github.com/beanstalkd/pybeanstalk, with an issue tracker
-and a wiki.
+and a wiki. Issue reports and pull requests most welcome.
+
 
 Copyright notice:
 

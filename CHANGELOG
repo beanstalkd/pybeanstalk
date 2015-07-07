@@ -1,3 +1,11 @@
+1.10.1 -- July 7, 2015:
+ * reorganization at GitHub
+ * switch to setuptools
+ * first-ever PyPI release
+ * initial tests for Twisted client
+ * several bug fixes
+ * bump versioning to that of current beanstalkd
+
 0.11.1 -- May 6, 2008:
  * made the poller timeout code into an debugging option (severconn._debug=True)
  * moved example.py from the main beanstalk package to the examples/ directory
