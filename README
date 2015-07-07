@@ -1,18 +1,20 @@
 PyBeanstalk:
-Copyright 2008
+Copyright 2008-2015
 
-A client library for beanstalkd. beanstalkd is a lightweight queuing daemon
+A client library for beanstalkd. beanstalkd is a lightweight job queuing daemon
 based on libevent. It is meant to be used across multiple systems, and takes
 inspiration from memcache. More details on beanstalk can be found at:
 http://xph.us/software/beanstalkd/
 
-This client library aims to be simple and extensible. It curently provides
+This client library aims to be simple and extensible. It currently provides
 nothing more than an interface to the protocol over a socktet, or e.g.
 thread-wrangling
 
 To install, just run python setup.py install from this directory.
   * NOTE to python developers: this has been tested to play nice with virtualenv
 
+The package home is at https://github.com/beanstalkd/pybeanstalk, with an issue tracker
+and a wiki.
 
 Copyright notice:
 
