@@ -6,9 +6,11 @@ based on libevent. It is meant to be used across multiple systems, and takes
 inspiration from memcache. More details on beanstalk can be found at:
 http://xph.us/software/beanstalkd/
 
-This client library aims to be simple and extensible. It currently provides
-nothing more than an interface to the protocol over a socket, or e.g.
-thread-wrangling
+This client library aims to be simple and extensible. It provides both a single thread,
+single connection serialized (select-based) beanstalk connection with optional, simple
+thread pool implementation, and a basic Twisted client. They can be used directly,
+or be used as basis for for more sophisticated client applications. Please see
+the examples directory for usage examples.
 
 To install, just run python setup.py install from this directory.
   * NOTE to python developers: this has been tested to play nice with virtualenv
