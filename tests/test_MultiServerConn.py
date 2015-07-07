@@ -90,7 +90,7 @@ def _test_putter_and_reserver(payload, pri):
 
     """
     # no point in checking preconditions here because we don't know what
-    # server we're going to be looking at. 
+    # server we're going to be looking at.
     #
     # TODO: for sanity though, we should query all servers to check they're
     # empty.
@@ -253,7 +253,7 @@ def test_ServerConn_fails_to_connect_with_a_reasonable_exception():
 
 def test_tube_operations():
     # first make sure its watching default
-    # this check is useless for our purposes, but will work fine since 
+    # this check is useless for our purposes, but will work fine since
     # it will check all servers
 
     # test clone here
@@ -288,13 +288,20 @@ def test_tube_operations():
     jid = newjob_['jid']
     assert newjob_.Server.stats_tube('bar')['data']['current-jobs-ready'] == 1
 
-    #because we're randomly choosing between servers, we shouldn't expect that
-    #the current-jobs-ready will be the same, since they're on distributed
-    #nodes
-    print conn.stats()
-    assert conn.stats()['data']['current-jobs-ready'] == 2,\
-            "Was expecting %s, got %s" % (expecting,
-                    newjob_.Server.stats()['data']['current-jobs-ready'])
+    # because we're randomly choosing between servers, we shouldn't expect that
+    # the current-jobs-ready will be the same, since they're on distributed
+    # nodes (note this test assumes TWO beanstalkd servers!)
+
+    # so if the jobs went to different servers, current job ready count is always 1;
+    # on the other hand, if they went to same server, the count can be 2 or 0, depending
+    # on which server the stats call hits (the one where jobs went, or the other one)
+
+    readycount = conn.stats()['data']['current-jobs-ready'] # can be 0, 1 or 2
+
+    if newjob_.Server != job_.Server:
+       assert readycount == 1,  "Was expecting 1, got %i" % readycount
+    else:
+       assert readycount in (0,2),  "Was expecting 2, got %i" % readycount
 
     # because the protocol blocks when we try to reserve a job, theres not a
     # good way to test that it does not return when the watchlist doesn't
