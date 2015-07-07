@@ -7,7 +7,6 @@ install:
 init: 
 	pip install -r requirements.txt
 
-
 # Omit currently failing multiServer tests
 test:
 	pip install nose
