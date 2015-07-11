@@ -62,9 +62,6 @@ class Job(object):
                         cmp(self.state, comparable.state),
                         cmp(self.data, comparable.data)])
 
-    def __del__(self):
-        self.Finish()
-
     def __str__(self):
         return pformat(self._serialize())
 
