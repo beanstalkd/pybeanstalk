@@ -23,7 +23,7 @@ and a wiki. Bug reports and pull requests most welcome.
 '''
 
 setup(name='pybeanstalk',
-      version='1.0rc0',
+      version='1.0rc1',
       description='A python client library for beanstalkd.',
       long_description = description_long,
       keywords='beanstalkd, twisted',

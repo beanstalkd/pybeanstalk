@@ -1,4 +1,8 @@
-1.0rc0 -- July 7, 2015:
+1.0rc1 -- July 11, 2015:
+ * forgot fix to #21 from rc0 (remove __del__)
+ * multiserver test was missing from 'make test'
+
+1.0rc0 -- July 11, 2015:
  * reorganization at GitHub
  * first-ever PyPI release
  * switch to setuptools from distutils
