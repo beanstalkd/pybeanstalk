@@ -10,7 +10,7 @@ init:
 # Omit currently failing multiServer tests
 test:
 	pip install nose
-	cd tests; nosetests test_Proto test_errors test_ServerConn
+	cd tests; nosetests test_Proto test_errors test_ServerConn test_MultiServerConn
 
 # Test twisted part separately using Trial rather than nose
 test-twisted:
