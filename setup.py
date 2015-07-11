@@ -15,7 +15,7 @@ be used as basis for for more sophisticated client applications. Please see the 
 directory for usage examples.
 
 To install, just run python setup.py install from this directory, or use the shortcuts
-in the Makefile.
+in the Makefile. For Twisted support, run install with the 'twisted' extra.
 
 The package home is at https://github.com/beanstalkd/pybeanstalk, with an issue tracker
 and a wiki. Bug reports and pull requests most welcome.
@@ -23,7 +23,7 @@ and a wiki. Bug reports and pull requests most welcome.
 '''
 
 setup(name='pybeanstalk',
-      version='1.10.1',
+      version='1.0rc0',
       description='A python client library for beanstalkd.',
       long_description = description_long,
       keywords='beanstalkd, twisted',
