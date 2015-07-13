@@ -9,7 +9,7 @@ import time
 
 from zope.interface import provider
 from twisted.trial import unittest
-from twisted.internet import protocol
+from twisted.internet import protocol, defer
 from twisted.logger import Logger, globalLogPublisher, formatEvent, STDLibLogObserver, ILogObserver
 
 # stuff under test
@@ -20,52 +20,25 @@ from beanstalk.job import Job
 # test configuration
 from config import get_config
 
-
-USE_NOSE = False
-
 #
 # Set up nose testing
 #
 
-if USE_NOSE:
-   from nose.tools import with_setup, assert_raises
-   from nose.twistedtools import deferred, stop_reactor, threaded_reactor, reactor
+from nose.tools import with_setup, assert_raises
+from nose.twistedtools import deferred, stop_reactor, threaded_reactor, reactor
 
-   # nose requires decorating deferred-returning Twisted Trial unittest methods
-   def deferred_if_nose(timeout=None):
-      return deferred(timeout=timeout)
+logging.basicConfig()
+logging.root.setLevel(logging.DEBUG)
 
-   logging.basicConfig()
-   logging.root.setLevel(logging.DEBUG)
-
-   # make Twisted log to Python std logging too
-   globalLogPublisher.addObserver(STDLibLogObserver())
-
-#
-# Alternatively, use Twisted Trial
-#
-
-else:
-   from twisted.internet import reactor
-
-   # passthru decorator for regular Twisted Trial use
-   def deferred_if_nose(**kwargs):
-      def wrapper(func):
-         return lambda *args, **kwargs: func(*args, **kwargs)
-      return wrapper
-
-   @provider(ILogObserver)
-   def PrintingObserver(event):
-      print formatEvent(event)
-
-   globalLogPublisher.addObserver(PrintingObserver)
+# make Twisted log to Python std logging too
+globalLogPublisher.addObserver(STDLibLogObserver())
 
 
 #
 # Common test setup and teardown
 #
 
-def _setup():
+def setup():
    "start up beanstalkd"
    global process
    config = get_config("ServerConn")
@@ -79,103 +52,105 @@ def _setup():
       logger.error("could not start beanstalkd test server at %s, exiting" % cmd)
       sys.exit()
    logger.info("beanstalkd server started at process %i" % process.pid)
-   time.sleep(0.2)
+   time.sleep(0.3)
 
-def _teardown():
+def teardown():
    "shut down beanstalkd"
+   stop_reactor() # required per nose docs on Twisted support
    logger = logging.getLogger("teardown")
    logger.info("terminating beanstalkd at %i" % process.pid)
    os.kill(process.pid, signal.SIGTERM)
 
-def teardown():
-   "additionally called only by nose (if USE_NOSE is set)"
-   stop_reactor()
-
 
 #
-# Finally, Twisted Trial client tests
+#  Twisted Trial client tests
 #
 
-class TestClient(unittest.TestCase):
+class TestTwistedClient(unittest.TestCase):
+   "Twisted client tests"
+
+   logger = Logger()
 
    def setUp(self):
-      _setup()
       cfg = get_config("ServerConn")
       self.host, self.port = cfg.BEANSTALKD_HOST, int(cfg.BEANSTALKD_PORT)
+      self.creator = protocol.ClientCreator(reactor, Beanstalk)
 
+   def tearDown(self):
+      self.conn.transport.loseConnection()
+
+   @deferred() # required for nose integration
    def test_00_Job(self):
-      "Job instantiation works"
+      "Twisted beanstalk Job instantiation succeeds"
 
-      @deferred_if_nose()
-      def onconn(client):
+      def onconn(conn):
+         self.conn = conn
          rawjob =  {'jid': 1, 'bytes': 13, 'state': 'ok', 'data': 'Look!  A job!'}
-         rawjob.update(conn=client)
+         rawjob.update(conn=conn)
          j = Job(**rawjob)
+         assert j["data"] == 'Look!  A job!'
+         self.logger.debug("Job created ok")
 
-      creator = protocol.ClientCreator(reactor, Beanstalk)
-      connector = creator.connectTCP(self.host, self.port)
+      connector = self.creator.connectTCP(self.host, self.port)
       return connector.addCallback(onconn)
 
 
-   @deferred_if_nose()
+   @deferred() # required for nose integration
    def test_01_Stats(self):
-      "we get stats from server"
+      "Twisted client correctly gets stats from server"
 
-      creator = protocol.ClientCreator(reactor, Beanstalk)
-      connector = creator.connectTCP(self.host, self.port)
-
-      @deferred_if_nose()
-      def onconn(client, *args, **kwargs):
-         statist = client.stats()
+      def onconn(conn):
+         self.conn = conn
+         statist = conn.stats()
          #
          def onstats(stats):
             self.assertEqual(stats["state"], "ok")
+            self.logger.debug("got stats ok")
          #
-         return statist.addCallback(onstats)
+         statist.addCallback(onstats)
+      connector = self.creator.connectTCP(self.host, self.port)
+      return connector.addCallback(onconn)
 
-      connector.addCallback(onconn)
-      return connector
-
-   def tearDown(self):
-      _teardown()
-
-   @deferred_if_nose()
+   @deferred() # required for nose integration
    def test_02_Put_Reserve(self):
       "putting and reserving works"
 
-      self.client = protocol.ClientCreator(reactor, Beanstalk)
-      connector = self.client.connectTCP(self.host, self.port)
-
-      @deferred_if_nose()
-      def check_reserve_ok(conn):
-         reserver = conn.reserve()
+      def check_reserve_ok():
+         reserver = self.conn.reserve()
          #
-         def on_ok(job):
+         def on_ok(job, ):
             expected = {'jid': 1, 'bytes': 13, 'state': 'ok', 'data': 'Look!  A job!'}
             self.assertEqual(job, expected)
-
+            self.logger.debug("job reservation succeeded")
          reserver.addCallback(on_ok)
          #
          def on_fail(failure):
             raise Exception(failure)
          reserver.addErrback(on_fail)
-         #
          return reserver
 
-      @deferred_if_nose()
-      def check_put_ok(conn):
-         putter = conn.put('Look!  A job!', 8192, 0, 300)
+      def check_put_ok():
+         putter = self.conn.put('Look!  A job!', 8192, 0, 300)
          #
          def on_ok(job):
             self.assertEqual(job, {'jid': 1, 'state': 'ok'})
-            return check_reserve_ok(conn)
+            self.logger.debug("job putting succeeded")
          putter.addCallback(on_ok)
          #
          def on_fail(failure):
             raise Exception(failure)
          putter.addErrback(on_fail)
-         #
          return putter
 
-      return connector.addCallback(check_put_ok)
+      def onconn(conn):
+         "start both putting and reserving"
+         self.conn = conn
+         p = check_put_ok()
+         r = check_reserve_ok()
+         # set up the deferred returned to nose
+         defer.DeferredList((p, r)).chainDeferred(self.r)
 
+      connector = self.creator.connectTCP(self.host, self.port)
+      self.r = defer.Deferred()
+      connector.addCallback(onconn)
+      return self.r # chained after completion of putting and reserving

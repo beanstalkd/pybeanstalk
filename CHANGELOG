@@ -1,3 +1,6 @@
+1.0rc2 -- unreleased:
+ * fix #23 (make Twisted tests nose-runnable)
+
 1.0rc1 -- July 11, 2015:
  * forgot fix to #21 from rc0 (remove __del__)
  * multiserver test was missing from 'make test'
