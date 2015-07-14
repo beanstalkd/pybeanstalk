@@ -68,7 +68,7 @@ class Beanstalk(basic.LineReceiver):
         self._current = deque()
 
     def connectionMade(self):
-        print "Connected!"
+        self.logger.debug("{msg}", msg="Connected.")
         self.setLineMode()
 
     def __getattr__(self, attr):
