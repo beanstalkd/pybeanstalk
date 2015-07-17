@@ -16,3 +16,6 @@ test:
 test-twisted:
 	pip install -r requirements-twisted.txt
 	cd tests; trial test_Twisted.py
+
+test-without-beanstalkd:
+	cd tests; nosetests test_Proto test_errors
