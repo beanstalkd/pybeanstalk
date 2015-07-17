@@ -1,0 +1,14 @@
+language: python
+python:
+  - "2.7"
+  - "3.4"
+  - "pypy"
+  - "pypy3"
+
+# install dependencies
+install:
+  - pip install -r requirements.txt
+  - pip install -r requirements-twisted.txt
+
+# run tests without beanstalkd until Travis has it
+script: make test-without-beanstalkd
