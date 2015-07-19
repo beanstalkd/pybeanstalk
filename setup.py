@@ -48,6 +48,7 @@ setup(name='pybeanstalk',
       packages=['beanstalk'],
       install_requires=["pyaml"],
       extras_require={'twisted': ["zope.interface", "Twisted>=15.2.1"]},
+      tests_require=["nose", "tox"],
       include_package_data=True,
       zip_safe=False
 )
