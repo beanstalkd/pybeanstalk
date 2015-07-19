@@ -3,10 +3,16 @@ python:
   - "2.7"
   - "pypy"
 
+# trigger container infra on travis
+sudo: false
+
 # install dependencies
 install:
   - pip install -r requirements.txt
   - pip install -r requirements-twisted.txt
+
+# enable caching
+cache: pip
 
 # run tests without beanstalkd until Travis has it
 script: make test-without-beanstalkd
