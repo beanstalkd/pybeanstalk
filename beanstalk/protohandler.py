@@ -186,7 +186,7 @@ class Handler(object):
         if not data.endswith(eol) or not (len(data) == reply['bytes']+2):
             raise errors.ExpectedCrlf('Data not properly sent from server')
 
-        reply['data'] = resp.parsefunc(data.rstrip(eol))
+        reply['data'] = resp.parsefunc(data[:reply['bytes']])
         yield reply
         return
 
