@@ -102,6 +102,7 @@ class Beanstalk(basic.LineReceiver):
             res = pending.handler(line + "\r\n")
         except Exception, e:
             pending.fail(e)
+            p
         else:
             if res is not None: # we have a result!
                 pending.success(res)
@@ -130,19 +131,27 @@ class Beanstalk(basic.LineReceiver):
             self._current.appendleft(pending)
 
 
-class BeanstalkClientFactory(protocol.ClientFactory):
+class BeanstalkClientFactory(ReconnectingClientFactory):
 
-    logger = Logger()
+    def __init__(self, reactor, instance, callback):
+        self.reactor = reactor
+        self.instance = Beanstalk()
+        self.deferred = None
+        self.callback = callback
 
     def startedConnecting(self, connector):
-        self.logger.debug("{msg}", msg="Started to connect.")
+        None
 
     def buildProtocol(self, addr):
-        self.logger.debug("{msg}", msg="Connected.")
-        return Beanstalk()
+        self.deferred = defer.Deferred()
+        self.reactor.callLater(0, self.deferred.callback, self.instance)
+        self.deferred.addCallback(self.callback)
+        return self.instance
 
     def clientConnectionLost(self, connector, reason):
-        self.logger.debug("{msg}", msg="Lost connection, reason: " % reason)
+        self.instance = Beanstalk()
+        ReconnectingClientFactory.clientConnectionLost(self, connector, reason)
 
     def clientConnectionFailed(self, connector, reason):
-        self.logger.debug("{msg}", msg="Connection failed, reason: " % reason)
+        self.instance = Beanstalk()
+        ReconnectingClientFactory.clientConnectionLost(self, connector, reason)
