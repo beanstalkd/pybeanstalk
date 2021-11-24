@@ -305,7 +305,7 @@ def test_tube_operations():
 
     # because the protocol blocks when we try to reserve a job, theres not a
     # good way to test that it does not return when the watchlist doesn't
-    # include this job, untill threading/async is better anyway
+    # include this job, until threading/async is better anyway
     # out of orderness is a good test tho... :)
 
     job = newjob_.Server.reserve()

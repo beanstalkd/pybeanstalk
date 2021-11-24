@@ -176,7 +176,7 @@ def test_tube_operations():
 
     testlist = ['foo','bar','baz']
     conn.watchlist = testlist
-    # ordering may not be garunteed, sets dont care!
+    # ordering may not be guaranteed, sets dont care!
     assert set(conn.watchlist) == set(testlist)
     assert set(conn.list_tubes_watched()['data']) == set(testlist)
 
@@ -194,7 +194,7 @@ def test_tube_operations():
     assert conn.stats()['data']['current-jobs-ready'] == 2
     # because the protocol blocks when we try to reserve a job, theres not a
     # good way to test that it does not return when the watchlist doesn't
-    # include this job, untill threading/async is better anyway
+    # include this job, until threading/async is better anyway
     # out of orderness is a good test tho... :)
 
     job = conn.reserve()
