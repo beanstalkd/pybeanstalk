@@ -14,15 +14,15 @@ as a yaml file. Otherwise it is a raw character stream.
 The implementation is designed so that there is a function for each possible
 command line in the protocol. These functions return the command line, and a
 function for handling the response. The handler will return a ditcionary
-conatining the response. The handler is a generator that when fed data will
-yeild None when more input is expected, and the results dict when all the data
+containing the response. The handler is a generator that when fed data will
+yield None when more input is expected, and the results dict when all the data
 is provided. Further, it has an attribute, remaining, which is an integer that
 specifies how many bytes are still expected in the data portion of a reply.
 
 This may seem a bit round-about, but it allows for many different styles* of
 programming to use the same bit of code for implementing the protocol.
 
-* e.g. the simple syncronous connection and the twisted client both use this :)
+* e.g. the simple synchronous connection and the twisted client both use this :)
 
 NOTE: there are mre lines of documentation in this file than lines of code.
 It may be that I need to practice terseness in this form as much as i do with
@@ -285,7 +285,7 @@ def process_reserve_with_timeout(timeout=0):
 
             DEADLINE_SOON
     Note: After much internal debate I chose to go this route,
-    with hte one-to-one mappaing of function to protocol command. Higher level
+    with hte one-to-one mapping of function to protocol command. Higher level
     objects, like the connection objects, can combine these if they see fit.
     '''
     if int(timeout) < 0:
